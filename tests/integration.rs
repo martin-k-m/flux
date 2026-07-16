@@ -43,12 +43,18 @@ fn init_detects_rust_and_writes_config() {
 
     let (out, ok) = run(&dir, &["init"]);
     assert!(ok, "init should succeed: {out}");
-    assert!(out.contains("Flux configured"), "{out}");
+    assert!(out.contains("Initializing project"), "{out}");
+    assert!(out.contains("AI agents configured"), "{out}");
 
     let cfg = std::fs::read_to_string(dir.join(".flux")).unwrap();
     assert!(cfg.contains("project \"widget\""), "{cfg}");
     assert!(cfg.contains("language rust"), "{cfg}");
     assert!(cfg.contains("cargo build --release"), "{cfg}");
+
+    // init also scaffolds the AI-platform layer.
+    let platform = std::fs::read_to_string(dir.join("flux.yaml")).unwrap();
+    assert!(platform.contains("name: widget"), "{platform}");
+    assert!(dir.join(".flux.d").join("agents").is_dir());
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -451,6 +457,131 @@ fn plugin_search_filters_catalog() {
     assert!(
         !out.contains("terraform"),
         "unrelated plugin should not match: {out}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ---- AI-native platform layer ----
+
+/// A helper: a minimal Rust project with a source file.
+fn rust_project(tag: &str) -> PathBuf {
+    let dir = temp_project(tag);
+    write(
+        &dir,
+        "Cargo.toml",
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[dependencies]\nanyhow = \"1\"\n",
+    );
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    write(&dir, "src/main.rs", "pub fn go() {}\nfn main() {}\n");
+    dir
+}
+
+#[test]
+fn project_reports_intelligence_and_writes_knowledge_graph() {
+    let dir = rust_project("project");
+    let (out, ok) = run(&dir, &["project"]);
+    assert!(ok, "{out}");
+    assert!(out.contains("Repository Intelligence"), "{out}");
+    assert!(out.contains("Health"), "{out}");
+    // The knowledge graph is written for AI/tools to consume.
+    let arch = dir.join(".flux-cache/knowledge/architecture.json");
+    assert!(arch.is_file(), "architecture.json should exist");
+    let arch = std::fs::read_to_string(arch).unwrap();
+    assert!(arch.contains("\"components\""), "{arch}");
+
+    // --json emits the architecture graph on stdout.
+    let (jout, jok) = run(&dir, &["project", "--json"]);
+    assert!(jok, "{jout}");
+    assert!(jout.contains("\"project\""), "{jout}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn agent_list_and_run_maintenance() {
+    let dir = rust_project("agent");
+    let (list, ok) = run(&dir, &["agent", "list"]);
+    assert!(ok, "{list}");
+    assert!(list.contains("maintenance"), "{list}");
+    assert!(list.contains("reviewer"), "{list}");
+
+    let (run_out, ok) = run(&dir, &["agent", "run", "maintenance"]);
+    assert!(ok, "{run_out}");
+    assert!(run_out.contains("Flux Maintenance"), "{run_out}");
+    assert!(
+        dir.join(".flux-cache/reports/maintenance.md").is_file(),
+        "the agent should write a report"
+    );
+
+    // Unknown agents fail clearly.
+    let (bad, ok) = run(&dir, &["agent", "run", "nope"]);
+    assert!(!ok, "unknown agent should fail: {bad}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn ask_context_prints_bundle() {
+    let dir = rust_project("ask");
+    let (out, ok) = run(&dir, &["ask", "--context"]);
+    assert!(ok, "{out}");
+    assert!(out.contains("Project: demo"), "{out}");
+    assert!(out.contains("## Components"), "{out}");
+
+    // A plain question falls back to an offline, labelled answer.
+    let (ans, ok) = run(&dir, &["ask", "explain this repository"]);
+    assert!(ok, "{ans}");
+    assert!(ans.contains("offline heuristic"), "{ans}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn github_init_writes_workflow() {
+    let dir = rust_project("gh");
+    let (out, ok) = run(&dir, &["github", "init"]);
+    assert!(ok, "{out}");
+    assert!(dir.join(".github/workflows/flux.yml").is_file());
+    assert!(dir.join(".github/pull_request_template.md").is_file());
+    let wf = std::fs::read_to_string(dir.join(".github/workflows/flux.yml")).unwrap();
+    assert!(wf.contains("flux verify"), "{wf}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn docs_generate_then_check_is_in_sync() {
+    let dir = rust_project("docs");
+    // Before generation, --check reports drift and exits non-zero.
+    let (chk, ok) = run(&dir, &["docs", "--check"]);
+    assert!(!ok, "check should fail before generation: {chk}");
+
+    let (gen, ok) = run(&dir, &["docs"]);
+    assert!(ok, "{gen}");
+    assert!(dir.join("docs/commands.md").is_file());
+    assert!(dir.join("docs/manifest.json").is_file());
+
+    let (chk2, ok) = run(&dir, &["docs", "--check"]);
+    assert!(ok, "check should pass after generation: {chk2}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dashboard_writes_self_contained_html() {
+    let dir = rust_project("dash");
+    let (out, ok) = run(&dir, &["dashboard"]);
+    assert!(ok, "{out}");
+    let html = dir.join(".flux-cache/reports/dashboard.html");
+    assert!(html.is_file());
+    let html = std::fs::read_to_string(html).unwrap();
+    assert!(html.starts_with("<!doctype html>"), "{}", &html[..40]);
+    assert!(html.contains("demo"), "should name the project");
+    // Self-contained: no external resource references.
+    assert!(
+        !html.contains("http://") && !html.contains("https://"),
+        "must not reference the network"
     );
 
     let _ = std::fs::remove_dir_all(&dir);

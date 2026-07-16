@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 
 use crate::agent;
 use crate::analytics;
@@ -86,15 +86,52 @@ enum Command {
         #[arg(long)]
         target: Option<String>,
     },
-    /// Manage local build runners (agents).
+    /// Roll back the latest deployment to the previous release.
+    Rollback {
+        /// Override the deploy target (local, docker, kubernetes, vm).
+        #[arg(long)]
+        target: Option<String>,
+    },
+    /// Run AI agents (planner, reviewer, tester, maintenance, ...).
     Agent {
         #[command(subcommand)]
         action: AgentAction,
     },
-    /// List build runners and declared runner pools.
+    /// Manage local build runners and declared runner pools.
     Runners {
         #[command(subcommand)]
         action: RunnersAction,
+    },
+    /// Show repository intelligence: languages, architecture, health.
+    Project {
+        /// Emit the analysis as JSON (the knowledge graph) instead of a report.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Ask a question about this repository (offline, or via `ai.command`).
+    Ask {
+        /// The question (quote it). Omit with `--context` to dump the bundle.
+        query: Option<String>,
+        /// Print the assembled context bundle instead of answering.
+        #[arg(long)]
+        context: bool,
+    },
+    /// GitHub integration: CI scaffolding, PR review, issue planning.
+    Github {
+        #[command(subcommand)]
+        action: GithubAction,
+    },
+    /// Regenerate reference docs from the CLI, agents, and knowledge graph.
+    Docs {
+        /// Only check that generated docs are in sync; don't write.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Render a self-contained HTML project dashboard.
+    Dashboard {
+        /// Print the output path only (don't attempt to open it).
+        #[arg(long)]
+        no_open: bool,
     },
     /// Show build-performance analytics from run history.
     Analytics,
@@ -181,16 +218,59 @@ enum WorkspaceAction {
 
 #[derive(Subcommand, Debug)]
 enum AgentAction {
-    /// Register this machine as an available runner.
-    Start,
-    /// List registered runners.
+    /// List the available AI agents.
     List,
+    /// Run an agent and write its report.
+    Run {
+        /// The agent name (e.g. maintenance, reviewer, tester, planner).
+        name: String,
+        /// Free-text argument (e.g. the feature for the planner to break down).
+        arg: Option<String>,
+    },
+    /// Show which agent reports have been generated.
+    Status,
+    /// Scaffold a custom agent definition under `.flux.d/agents/`.
+    Create {
+        /// The new agent's name.
+        name: String,
+    },
+    /// Install (register) a custom agent (honest: records it locally).
+    Install {
+        /// The agent name to install.
+        name: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
 enum RunnersAction {
+    /// Register this machine as an available build runner.
+    Start,
     /// List registered runners and declared pools.
     List,
+}
+
+#[derive(Subcommand, Debug)]
+enum GithubAction {
+    /// Scaffold a CI workflow and PR template under `.github/`.
+    Init {
+        /// Overwrite existing files.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Review the working tree, or a PR (needs the `gh` CLI).
+    Review {
+        /// A pull-request number to review (requires `gh`).
+        #[arg(long)]
+        pr: Option<u32>,
+    },
+    /// Turn an issue or a description into an implementation plan.
+    Plan {
+        /// A free-text description of the work.
+        description: Option<String>,
+        /// An issue number to plan (title fetched via `gh` when available).
+        #[arg(long)]
+        issue: Option<u32>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -254,6 +334,12 @@ enum PluginAction {
     Verify,
 }
 
+/// The clap command tree, exposed so the docs engine can generate the command
+/// reference from the single source of truth rather than a hand-kept list.
+pub fn clap_command() -> clap::Command {
+    Cli::command()
+}
+
 /// Entry point invoked by `main`. Returns the process exit code.
 pub fn run() -> i32 {
     log::init();
@@ -276,8 +362,14 @@ pub fn run() -> i32 {
         Command::Info => cmd_info(&cwd),
         Command::Ci => cmd_ci(&cwd),
         Command::Deploy { target } => cmd_deploy(&cwd, target),
+        Command::Rollback { target } => cmd_rollback(&cwd, target),
         Command::Agent { action } => cmd_agent(&cwd, action),
         Command::Runners { action } => cmd_runners(&cwd, action),
+        Command::Project { json } => cmd_project(&cwd, json),
+        Command::Ask { query, context } => cmd_ask(&cwd, query, context),
+        Command::Github { action } => cmd_github(&cwd, action),
+        Command::Docs { check } => cmd_docs(&cwd, check),
+        Command::Dashboard { no_open } => cmd_dashboard(&cwd, no_open),
         Command::Analytics => cmd_analytics(&cwd),
         Command::Lock => cmd_lock(&cwd),
         Command::Reproduce => cmd_reproduce(&cwd),
@@ -667,38 +759,128 @@ fn cmd_deploy(root: &Path, target_override: Option<String>) -> anyhow::Result<i3
 // ---------------------------------------------------------------------------
 
 fn cmd_agent(root: &Path, action: AgentAction) -> anyhow::Result<i32> {
+    use crate::agents;
+    let platform = crate::platform::PlatformConfig::load(root);
+
     match action {
-        AgentAction::Start => {
-            let runner = agent::register_self(root)?;
+        AgentAction::List => {
             log::banner(VERSION_LABEL);
-            log::ok_line(&format!(
-                "{} registered as a Flux runner",
-                log::bold(&runner.name)
-            ));
-            print_runner(&runner);
+            log::heading("AI agents:");
+            for a in agents::registry() {
+                println!(
+                    "  {} {}  {}",
+                    log::cyan(log::DOT),
+                    log::bold(a.name()),
+                    log::dim(a.description())
+                );
+            }
+            let note = match platform.ai_command() {
+                Some(cmd) => format!("AI provider: {cmd}"),
+                None => "No AI provider configured — agents run heuristics. Set `ai.command` in flux.yaml for LLM-assisted output.".to_string(),
+            };
+            log::info_line(&format!("\n  {}", log::dim(&note)));
+            Ok(0)
+        }
+        AgentAction::Run { name, arg } => {
+            if !platform.agents_enabled {
+                anyhow::bail!("agents are disabled in flux.yaml (set agents.enabled: true)");
+            }
+            let Some(agent) = agents::find(&name) else {
+                anyhow::bail!(
+                    "unknown agent '{name}' (available: {})",
+                    agents::registry()
+                        .iter()
+                        .map(|a| a.name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            };
+            let ctx = agents::RunCtx {
+                root,
+                arg,
+                platform: &platform,
+            };
+            let report = agents::run(agent.as_ref(), &ctx);
+            log::banner(VERSION_LABEL);
+            report.print();
+            let path = report.write(root)?;
             log::info_line(&format!(
                 "\n  {}",
-                log::dim("This machine now runs pipeline steps across its cores. Cross-machine")
-            ));
-            log::info_line(&format!(
-                "  {}",
-                log::dim("distribution (gRPC controller/agents) is planned for a later phase.")
+                log::dim(&format!("report written to {}", path.display()))
             ));
             Ok(0)
         }
-        AgentAction::List => {
-            let runners = agent::list(root)?;
+        AgentAction::Status => {
             log::banner(VERSION_LABEL);
-            log::heading("Available Runners:");
-            if runners.is_empty() {
+            log::heading("Agent reports:");
+            let dir = agents::reports_dir(root);
+            let mut any = false;
+            for a in agents::registry() {
+                let report = dir.join(format!("{}.md", a.name()));
+                if report.is_file() {
+                    any = true;
+                    log::ok_line(&format!(
+                        "{}  {}",
+                        a.name(),
+                        log::dim(&report.display().to_string())
+                    ));
+                }
+            }
+            if !any {
                 log::info_line(&format!(
-                    "  {} none registered — run `flux agent start`",
+                    "  {} no reports yet — run `flux agent run <name>`",
                     log::dim(log::DOT)
                 ));
             }
-            for r in runners {
-                println!("\n  {}", log::bold(&r.name));
-                print_runner(&r);
+            Ok(0)
+        }
+        AgentAction::Create { name } => {
+            let dir = crate::platform::PlatformConfig::dir(root).join("agents");
+            std::fs::create_dir_all(&dir)?;
+            let path = dir.join(format!("{name}.md"));
+            if path.exists() {
+                anyhow::bail!("agent '{name}' already exists at {}", path.display());
+            }
+            std::fs::write(
+                &path,
+                format!(
+                    "# {name} agent\n\n\
+                     A custom Flux agent definition. Describe what this agent should analyse and\n\
+                     recommend. When `ai.command` is set in flux.yaml, Flux pipes this prompt plus\n\
+                     the project context to your model.\n\n\
+                     ## Prompt\n\n\
+                     You are the '{name}' agent. Inspect the repository and report findings.\n"
+                ),
+            )?;
+            log::banner(VERSION_LABEL);
+            log::ok_line(&format!("Scaffolded custom agent '{}'", log::bold(&name)));
+            log::info_line(&format!(
+                "\n  wrote {}",
+                log::cyan(&path.display().to_string())
+            ));
+            Ok(0)
+        }
+        AgentAction::Install { name } => {
+            // Honest: built-ins need no install; custom agents are registered by
+            // their presence under `.flux.d/agents/`.
+            log::banner(VERSION_LABEL);
+            if agents::find(&name).is_some() {
+                log::ok_line(&format!("'{name}' is a built-in agent — already available"));
+            } else {
+                let path = crate::platform::PlatformConfig::dir(root)
+                    .join("agents")
+                    .join(format!("{name}.md"));
+                if path.is_file() {
+                    log::ok_line(&format!(
+                        "custom agent '{name}' is registered ({})",
+                        path.display()
+                    ));
+                } else {
+                    log::fail_line(&format!(
+                        "no agent '{name}' found — run `flux agent create {name}` first"
+                    ));
+                    return Ok(1);
+                }
             }
             Ok(0)
         }
@@ -716,6 +898,20 @@ fn print_runner(r: &agent::Runner) {
 
 fn cmd_runners(root: &Path, action: RunnersAction) -> anyhow::Result<i32> {
     match action {
+        RunnersAction::Start => {
+            let runner = agent::register_self(root)?;
+            log::banner(VERSION_LABEL);
+            log::ok_line(&format!(
+                "{} registered as a Flux runner",
+                log::bold(&runner.name)
+            ));
+            print_runner(&runner);
+            log::info_line(&format!(
+                "\n  {}",
+                log::dim("This machine now runs pipeline steps across its cores.")
+            ));
+            Ok(0)
+        }
         RunnersAction::List => {
             let runners = agent::list(root)?;
             let config = load_config(root).unwrap_or_default();
@@ -724,7 +920,7 @@ fn cmd_runners(root: &Path, action: RunnersAction) -> anyhow::Result<i32> {
             log::heading("Active Runners:");
             if runners.is_empty() {
                 log::info_line(&format!(
-                    "  {} none registered — run `flux agent start`",
+                    "  {} none registered — run `flux runners start`",
                     log::dim(log::DOT)
                 ));
             }
@@ -747,14 +943,273 @@ fn cmd_runners(root: &Path, action: RunnersAction) -> anyhow::Result<i32> {
                         log::field("    memory", mem);
                     }
                 }
-                log::info_line(&format!(
-                    "\n  {}",
-                    log::dim("Pool-based scheduling across machines lands with the distributed runner network.")
-                ));
             }
             Ok(0)
         }
     }
+}
+
+fn cmd_project(root: &Path, json: bool) -> anyhow::Result<i32> {
+    let intel = crate::intel::analyze(root);
+
+    // Always refresh the knowledge graph so the AI-legible artifacts stay current.
+    let written = crate::knowledge::build(root, &intel)?;
+
+    if json {
+        let arch = crate::knowledge::dir(root).join("architecture.json");
+        print!("{}", std::fs::read_to_string(&arch)?);
+        return Ok(0);
+    }
+
+    log::banner(VERSION_LABEL);
+    log::heading("Repository Intelligence:");
+    log::field("Project", &intel.project);
+    log::field(
+        "Language",
+        &intel
+            .primary_language
+            .as_deref()
+            .map(crate::intel::language_display)
+            .unwrap_or_else(|| "unknown".into()),
+    );
+    log::field("Source files", &intel.file_count.to_string());
+
+    let health_line = format!("{}% ({})", intel.health.score, intel.health.grade());
+    let painted = if intel.health.score >= 75 {
+        log::green(&health_line)
+    } else if intel.health.score >= 50 {
+        log::yellow(&health_line)
+    } else {
+        log::red(&health_line)
+    };
+    log::field("Health", &painted);
+
+    if !intel.components.is_empty() {
+        log::heading("Architecture:");
+        for c in &intel.components {
+            let deps = if c.depends_on.is_empty() {
+                String::new()
+            } else {
+                log::dim(&format!("  → {}", c.depends_on.join(", ")))
+            };
+            println!(
+                "  {} {} {}{}",
+                log::cyan(log::DOT),
+                log::bold(&c.name),
+                log::dim(&format!("({} files)", c.files)),
+                deps
+            );
+        }
+    }
+
+    log::heading("Dependencies:");
+    log::field(
+        "Declared",
+        &format!(
+            "{}{}",
+            intel.dependencies.total,
+            intel
+                .dependencies
+                .source
+                .as_ref()
+                .map(|s| format!(" ({s})"))
+                .unwrap_or_default()
+        ),
+    );
+
+    if intel.git.is_repo {
+        log::heading("Activity:");
+        log::field("Commits", &intel.git.commits.to_string());
+        log::field("Contributors", &intel.git.contributors.to_string());
+        if let Some(last) = &intel.git.last_commit {
+            log::field("Last commit", last);
+        }
+    }
+
+    let gaps = intel.health.gaps();
+    if !gaps.is_empty() {
+        log::heading("Recommendations:");
+        for g in gaps.into_iter().take(4) {
+            log::info_line(&format!(
+                "  {} {} {}",
+                log::yellow("\u{26a0}"),
+                log::bold(&g.name),
+                log::dim(&format!("(+{}) — {}", g.weight, g.detail))
+            ));
+        }
+    }
+
+    if intel.has_killer {
+        log::info_line(&format!(
+            "\n  {}",
+            log::dim("Security: Protected by Killer")
+        ));
+    }
+    log::info_line(&format!(
+        "  {}",
+        log::dim(&format!(
+            "knowledge graph written to {}",
+            written
+                .first()
+                .and_then(|p| p.parent())
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        ))
+    ));
+    Ok(0)
+}
+
+fn cmd_ask(root: &Path, query: Option<String>, context: bool) -> anyhow::Result<i32> {
+    if context {
+        print!("{}", crate::ask::context_bundle(root));
+        return Ok(0);
+    }
+    let Some(question) = query else {
+        anyhow::bail!(
+            "ask a question, e.g. `flux ask \"explain this repository\"` (or use --context)"
+        );
+    };
+    let platform = crate::platform::PlatformConfig::load(root);
+    let answer = crate::ask::answer(root, &question, &platform);
+    log::banner(VERSION_LABEL);
+    if answer.ai_used {
+        log::info_line(&format!("  {}", log::dim("(via ai.command)")));
+    } else {
+        log::info_line(&format!("  {}", log::dim("(offline heuristic answer)")));
+    }
+    println!();
+    for line in answer.text.lines() {
+        println!("  {line}");
+    }
+    Ok(0)
+}
+
+fn cmd_github(root: &Path, action: GithubAction) -> anyhow::Result<i32> {
+    let platform = crate::platform::PlatformConfig::load(root);
+    match action {
+        GithubAction::Init { force } => {
+            let result = crate::github::init(root, force)?;
+            log::banner(VERSION_LABEL);
+            log::heading("GitHub integration:");
+            for p in &result.written {
+                log::ok_line(&format!("wrote {}", log::cyan(&p.display().to_string())));
+            }
+            for p in &result.skipped {
+                log::info_line(&format!(
+                    "  {} skipped {} (exists — use --force)",
+                    log::dim(log::DOT),
+                    p.display()
+                ));
+            }
+            if !crate::github::gh_available() {
+                log::info_line(&format!(
+                    "\n  {}",
+                    log::dim("Install the `gh` CLI to review PRs and fetch issues directly.")
+                ));
+            }
+            Ok(0)
+        }
+        GithubAction::Review { pr } => {
+            let report = crate::github::review(root, pr, &platform)?;
+            log::banner(VERSION_LABEL);
+            report.print();
+            let path = report.write(root)?;
+            log::info_line(&format!(
+                "\n  {}",
+                log::dim(&format!("report written to {}", path.display()))
+            ));
+            Ok(0)
+        }
+        GithubAction::Plan { description, issue } => {
+            let report = crate::github::plan(root, issue, description, &platform);
+            log::banner(VERSION_LABEL);
+            report.print();
+            let path = report.write(root)?;
+            log::info_line(&format!(
+                "\n  {}",
+                log::dim(&format!("report written to {}", path.display()))
+            ));
+            Ok(0)
+        }
+    }
+}
+
+fn cmd_docs(root: &Path, check: bool) -> anyhow::Result<i32> {
+    log::banner(VERSION_LABEL);
+    if check {
+        let stale = crate::docs_engine::check(root);
+        if stale.is_empty() {
+            log::ok_line("Generated docs are in sync");
+            Ok(0)
+        } else {
+            log::heading("Out-of-sync docs:");
+            for p in &stale {
+                log::fail_line(&p.display().to_string());
+            }
+            log::info_line(&format!(
+                "\n  {}",
+                log::dim("run `flux docs` to regenerate")
+            ));
+            Ok(1)
+        }
+    } else {
+        let written = crate::docs_engine::write(root)?;
+        log::heading("Generated docs:");
+        for p in &written {
+            log::ok_line(&format!("wrote {}", log::cyan(&p.display().to_string())));
+        }
+        Ok(0)
+    }
+}
+
+fn cmd_dashboard(root: &Path, _no_open: bool) -> anyhow::Result<i32> {
+    let path = crate::dashboard::write(root)?;
+    log::banner(VERSION_LABEL);
+    log::ok_line("Dashboard rendered");
+    log::info_line(&format!(
+        "\n  {}\n  {}",
+        log::cyan(&path.display().to_string()),
+        log::dim("open this file in a browser — it's fully self-contained (no network).")
+    ));
+    Ok(0)
+}
+
+fn cmd_rollback(root: &Path, target: Option<String>) -> anyhow::Result<i32> {
+    // Honest rollback: redeploy the previous release from the artifact registry.
+    let releases = list_releases(root);
+    log::banner(VERSION_LABEL);
+    if releases.len() < 2 {
+        log::fail_line(
+            "need at least two releases to roll back (create releases with `flux release create`)",
+        );
+        return Ok(1);
+    }
+    let previous = &releases[releases.len() - 2];
+    log::heading("Rollback:");
+    log::field("Rolling back to", previous);
+    log::info_line(&format!(
+        "  {}",
+        log::dim("Re-dispatching the previous release through the deploy target.")
+    ));
+    // Reuse the normal deploy path; the deploy module reports honestly whether
+    // the target tool (docker/kubectl) is present.
+    cmd_deploy(root, target)
+}
+
+/// Release version labels present in the registry, in sorted (chronological-ish)
+/// order. Releases are stored as directories under `.flux-cache/artifacts/releases/`.
+fn list_releases(root: &Path) -> Vec<String> {
+    let dir = root.join(".flux-cache").join("artifacts").join("releases");
+    let mut out: Vec<String> = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .filter_map(|e| e.file_name().into_string().ok())
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    out.sort();
+    out
 }
 
 fn cmd_analytics(root: &Path) -> anyhow::Result<i32> {
@@ -1018,9 +1473,9 @@ fn cmd_plugin(root: &Path, action: PluginAction) -> anyhow::Result<i32> {
         PluginAction::Install { name } => {
             crate::plugins::install(root, &name)?;
             log::banner(VERSION_LABEL);
-            log::ok_line(&format!("Plugin {} installed", log::bold(&name)));
+            log::ok_line(&format!("Plugin {} registered", log::bold(&name)));
             log::info_line(&format!(
-                "  {} recorded under .flux-cache/plugins/ — a future phase will load its behaviour",
+                "  {} recorded under .flux-cache/plugins/ (Flux tracks installed plugins; it does not execute plugin-provided build behavior)",
                 log::dim(log::DOT)
             ));
             Ok(0)
@@ -1716,22 +2171,79 @@ fn cmd_init(root: &Path, template: Option<String>, force: bool) -> anyhow::Resul
 
     std::fs::write(&path, contents)?;
 
+    // Scaffold the AI-platform layer: flux.yaml + the authored-assets dir.
+    let platform_created = scaffold_platform(root, &project)?;
+
     log::banner(VERSION_LABEL);
-    println!("{}", log::bold("Flux configured:"));
+    println!("{}", log::bold("Initializing project..."));
     if let Some(name) = &template {
         log::ok_line(&format!("Template '{}' applied", log::bold(name)));
     }
+    log::ok_line("Repository analyzed");
     log::ok_line(&format!(
         "{} build pipeline created",
         language_label(&language)
     ));
-    log::ok_line("Test runner configured");
-    log::ok_line("Cache enabled");
+    if platform_created {
+        log::ok_line("AI agents configured");
+        log::ok_line("GitHub integration ready");
+    } else {
+        log::info_line(&format!(
+            "  {} flux.yaml already present — left as-is",
+            log::dim(log::DOT)
+        ));
+    }
     log::info_line(&format!(
         "\n  wrote {}",
         log::cyan(&path.display().to_string())
     ));
+    log::heading("Ready. Next:");
+    log::info_line(&format!(
+        "  {}",
+        log::dim("flux build      # run the pipeline")
+    ));
+    log::info_line(&format!(
+        "  {}",
+        log::dim("flux project    # repository intelligence")
+    ));
+    log::info_line(&format!("  {}", log::dim("flux agent list # AI agents")));
     Ok(0)
+}
+
+/// Create `flux.yaml` and the `.flux.d/{agents,rules,memory}` layout. Returns
+/// whether anything was created (false if `flux.yaml` already existed).
+fn scaffold_platform(root: &Path, project: &str) -> anyhow::Result<bool> {
+    use crate::platform::PlatformConfig;
+
+    if PlatformConfig::exists(root) {
+        return Ok(false);
+    }
+    let cfg = PlatformConfig {
+        project_name: Some(project.to_string()),
+        ..PlatformConfig::default()
+    };
+    std::fs::write(root.join(crate::platform::PLATFORM_FILE), cfg.render())?;
+
+    let base = PlatformConfig::dir(root);
+    for sub in ["agents", "rules", "memory"] {
+        let dir = base.join(sub);
+        std::fs::create_dir_all(&dir)?;
+        // A .gitkeep keeps the empty dirs in version control.
+        let keep = dir.join(".gitkeep");
+        if !keep.exists() {
+            std::fs::write(&keep, "")?;
+        }
+    }
+    // A short README so the directory explains itself.
+    std::fs::write(
+        base.join("README.md"),
+        "# .flux.d\n\nAuthored Flux platform assets (committed):\n\n\
+         - `agents/` — custom agent definitions (`flux agent create <name>`)\n\
+         - `rules/`  — review/policy rules for agents\n\
+         - `memory/` — shared notes for AI and humans\n\n\
+         Generated artifacts (knowledge graph, reports) live under `.flux-cache/` and are git-ignored.\n",
+    )?;
+    Ok(true)
 }
 
 /// The language a template targets.

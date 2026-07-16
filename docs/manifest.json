@@ -1,0 +1,179 @@
+{
+  "tool": "flux",
+  "commands": [
+    {
+      "name": "init",
+      "about": "Detect the project and write a starter `.flux` file"
+    },
+    {
+      "name": "build",
+      "about": "Run the full build pipeline (dependency graph, parallel)"
+    },
+    {
+      "name": "test",
+      "about": "Run the pipeline's test step(s) and their dependencies"
+    },
+    {
+      "name": "run",
+      "about": "Run a single named step (and its dependencies)"
+    },
+    {
+      "name": "clean",
+      "about": "Remove Flux's cache and artifacts"
+    },
+    {
+      "name": "info",
+      "about": "Show what Flux detects about this project"
+    },
+    {
+      "name": "ci",
+      "about": "Run a clean, cache-free CI pipeline and record an artifact"
+    },
+    {
+      "name": "deploy",
+      "about": "Deploy according to the `.flux` deployment block"
+    },
+    {
+      "name": "rollback",
+      "about": "Roll back the latest deployment to the previous release"
+    },
+    {
+      "name": "agent",
+      "about": "Run AI agents (planner, reviewer, tester, maintenance, ...)"
+    },
+    {
+      "name": "runners",
+      "about": "Manage local build runners and declared runner pools"
+    },
+    {
+      "name": "project",
+      "about": "Show repository intelligence: languages, architecture, health"
+    },
+    {
+      "name": "ask",
+      "about": "Ask a question about this repository (offline, or via `ai.command`)"
+    },
+    {
+      "name": "github",
+      "about": "GitHub integration: CI scaffolding, PR review, issue planning"
+    },
+    {
+      "name": "docs",
+      "about": "Regenerate reference docs from the CLI, agents, and knowledge graph"
+    },
+    {
+      "name": "dashboard",
+      "about": "Render a self-contained HTML project dashboard"
+    },
+    {
+      "name": "analytics",
+      "about": "Show build-performance analytics from run history"
+    },
+    {
+      "name": "lock",
+      "about": "Capture the current environment into `.flux.lock`"
+    },
+    {
+      "name": "reproduce",
+      "about": "Compare the current environment against `.flux.lock` (reproducibility)"
+    },
+    {
+      "name": "artifact",
+      "about": "Manage the artifact registry"
+    },
+    {
+      "name": "release",
+      "about": "Create a release from stored artifacts"
+    },
+    {
+      "name": "secret",
+      "about": "Manage encrypted secrets"
+    },
+    {
+      "name": "plugin",
+      "about": "Inspect, install, or scaffold plugins"
+    },
+    {
+      "name": "workspace",
+      "about": "Manage a multi-project workspace"
+    },
+    {
+      "name": "policy",
+      "about": "Check the pipeline against declared policies"
+    },
+    {
+      "name": "status",
+      "about": "A one-screen overview of the project's Flux state"
+    },
+    {
+      "name": "graph",
+      "about": "Print the pipeline dependency graph"
+    },
+    {
+      "name": "fmt",
+      "about": "Format the project with its language formatter"
+    },
+    {
+      "name": "lint",
+      "about": "Lint the project with its language linter"
+    },
+    {
+      "name": "changelog",
+      "about": "Generate a changelog from git commits"
+    },
+    {
+      "name": "version",
+      "about": "Bump the project version (major | minor | patch)"
+    },
+    {
+      "name": "deps",
+      "about": "Inspect project dependencies"
+    },
+    {
+      "name": "doctor",
+      "about": "Diagnose the environment, toolchains, and Flux setup"
+    },
+    {
+      "name": "validate",
+      "about": "Validate the `.flux` file (syntax, pipeline graph, references)"
+    },
+    {
+      "name": "verify",
+      "about": "Run the project's full check suite (fmt, clippy, tests)"
+    },
+    {
+      "name": "explain",
+      "about": "Explain the pipeline in plain language"
+    },
+    {
+      "name": "format",
+      "about": "Canonically format the `.flux` file in place"
+    }
+  ],
+  "agents": [
+    {
+      "name": "planner",
+      "description": "Break a feature or issue into an implementation plan"
+    },
+    {
+      "name": "reviewer",
+      "description": "Summarise the current changes and flag review risks"
+    },
+    {
+      "name": "tester",
+      "description": "Find code that lacks test coverage (heuristic)"
+    },
+    {
+      "name": "documentation",
+      "description": "Detect documentation gaps"
+    },
+    {
+      "name": "maintenance",
+      "description": "Housekeeping: dependencies, TODO debt, hygiene"
+    },
+    {
+      "name": "release",
+      "description": "Preview release notes and versioning"
+    }
+  ]
+}

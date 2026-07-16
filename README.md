@@ -18,6 +18,13 @@ the orchestration layer that connects a developer's tools — not replace them.
   cross-project affected-detection, first-party dev tools (`fmt`, `lint`,
   `doctor`, `changelog`, `version`, `deps`), pipeline **templates**, a **policy
   engine**, automatic **Blink/Killer** integration, and a plugin **PDK**.
+- **Phase 5** — an **AI-native** layer: **repository intelligence**
+  (`flux project`), a **knowledge graph**, honest **AI agents**
+  (`flux agent run …`), a natural-language front door (`flux ask`), local
+  **GitHub** integration (`flux github`), a docs engine (`flux docs`), and a
+  self-contained HTML **dashboard**. Flux embeds no model — it makes the
+  repository *legible* to the AI agents and people who work on it, and can
+  delegate to an external model you configure.
 
 ---
 
@@ -73,12 +80,14 @@ cargo build --release      # binary at target/release/flux
 | `flux clean`                         | Remove Flux's cache/artifacts/secrets/runner state       |
 | `flux info`                          | Show detection, container engine, and runners            |
 | `flux deploy [--target T]`           | Deploy per the `deployment { … }` block                  |
-| `flux agent start` / `agent list`    | Register/list local build runners                        |
+| `flux project` / `flux ask "…"`      | Repository intelligence / natural-language query         |
+| `flux agent run <name>`              | Run an AI agent (planner, reviewer, maintenance, …)      |
+| `flux github init` / `docs` / `dashboard` | GitHub CI scaffolding / regen docs / HTML dashboard |
 | `flux artifact push <path>` / `list` | Push to / list the artifact registry                     |
 | `flux release create <version>`      | Bundle a version's artifacts into a release              |
 | `flux secret set <name> <value>` / `list` | Manage encrypted secrets                            |
 | `flux plugin list` / `install <name>`| Inspect / install plugins                                |
-| `flux runners list`                  | List runners and declared runner pools                   |
+| `flux runners start` / `list`        | Register / list local build runners and pools            |
 | `flux analytics`                     | Build-performance stats from run history                 |
 | `flux lock` / `flux reproduce`       | Capture / verify a reproducible environment              |
 | `flux secret set <n> <v> --env prod` | Per-environment encrypted secrets                        |
@@ -129,7 +138,7 @@ Pipeline:
 - **Deployment (2.7)** — `flux deploy` targets local, docker, or kubernetes
   (generates a real Deployment manifest); acts when the tool is present,
   degrades honestly when it isn't.
-- **Runners (2.2)** — `flux agent start` registers this machine as a worker; the
+- **Runners (2.2)** — `flux runners start` registers this machine as a worker; the
   graph engine schedules steps across its cores.
 - **Plugins (2.10)** — `flux plugin install <name>` records a plugin; the
   built-in language plugins drive default pipelines.
@@ -174,6 +183,36 @@ Pipeline:
 - **Plugin PDK (4.19)** — `flux plugin create <name>` scaffolds a plugin with a
   manifest, source, tests, and README.
 
+## AI-native platform (Phase 5)
+
+Flux embeds **no language model**. Instead it makes a repository *legible* — it
+writes a structured, deterministic description that AI agents and humans consume,
+and can delegate to an external model you configure in `flux.yaml`
+(`ai.command`). See [docs/repository-intelligence.md](docs/repository-intelligence.md)
+and [docs/agents.md](docs/agents.md).
+
+- **Repository intelligence (`flux project`)** — languages, architecture (with
+  dependency edges), dependency inventory, git activity, and a deterministic
+  **health score**. Writes a knowledge graph to `.flux-cache/knowledge/*.json`.
+- **AI agents (`flux agent run <name>`)** — `planner`, `reviewer`, `tester`,
+  `documentation`, `maintenance`, `release`. Honest heuristic analyzers that write
+  structured reports to `.flux-cache/reports/`; with `ai.command` set, each report
+  is expanded by your external model.
+- **Ask (`flux ask "…"`)** — a natural-language front door. `--context` prints the
+  raw bundle for any tool to consume; otherwise it answers offline or via your
+  model.
+- **GitHub (`flux github init|review|plan`)** — CI scaffolding, working-tree/PR
+  review, and issue → plan. Local-first, with optional `gh` CLI enrichment; never
+  posts on your behalf.
+- **Docs engine (`flux docs [--check]`)** — regenerates the command reference,
+  agent catalogue, and a `manifest.json` feed from live sources; `--check` guards
+  drift in CI.
+- **Dashboard (`flux dashboard`)** — a self-contained static HTML report (no
+  network, no server).
+
+`flux init` scaffolds this layer: it writes `flux.yaml` and `.flux.d/`
+(authored assets) alongside the `.flux` pipeline.
+
 ## Self-maintenance & release
 
 Flux helps maintain itself and any project it runs on:
@@ -214,7 +253,7 @@ flux test        # run the test step
 
 ## Roadmap
 
-**Available now (v0.1)**
+**Available now (v0.2)**
 
 - ✅ `.flux` configuration language + `flux validate`
 - ✅ Dependency-graph pipeline engine (parallel, `needs`, retries, `only_if`)
@@ -223,14 +262,16 @@ flux test        # run the test step
 - ✅ Deployment dispatch, workspaces, policy engine
 - ✅ First-party tools (`fmt`/`lint`/`doctor`/`changelog`/`version`/`deps`)
 - ✅ Plugins + PDK, local runners, Blink/Killer integration
+- ✅ AI-native layer: repository intelligence, knowledge graph, AI agents,
+  `flux ask`, local GitHub integration, docs engine, HTML dashboard
 
 **Coming soon**
 
 - ○ Cross-machine distributed runners
-- ○ Web dashboard & build insights
+- ○ Served web dashboard (Flux ships a local static `flux dashboard` today)
+- ○ Hosted GitHub App (local `flux github` + `gh` today)
 - ○ REST API & SDKs
 - ○ Hosted plugin marketplace
-- ○ Advanced deployment targets & rollbacks
 - ○ Team workflows
 - ○ Prebuilt installer (`cargo install` / Homebrew / one-line script)
 
@@ -238,6 +279,8 @@ flux test        # run the test step
 
 - [The `.flux` language](docs/flux-language.md)
 - [Architecture](docs/architecture.md)
+- [Repository intelligence](docs/repository-intelligence.md) · [AI agents](docs/agents.md) · [GitHub integration](docs/github.md)
+- [Command reference](docs/commands.md) (generated by `flux docs`)
 - [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 ## Scope & honesty

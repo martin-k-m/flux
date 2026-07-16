@@ -1,6 +1,6 @@
 # Security Policy
 
-Flux is early-stage (v0.1) software. We take security seriously and appreciate
+Flux is v0.2 software. We take security seriously and appreciate
 responsible disclosure.
 
 ## Supported versions

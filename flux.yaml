@@ -1,0 +1,15 @@
+project:
+  name: flux
+pipeline:
+  autoDetect: true
+agents:
+  enabled: true
+ai:
+  provider: none
+  command: ""
+github:
+  enabled: true
+deployment:
+  enabled: false
+integrations:
+  github: true
