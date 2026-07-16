@@ -13,7 +13,7 @@ It's the "build" tool in a three-part ecosystem — **Blink** creates projects,
 docs website lives in a separate repo (`flux-web`, deployed at
 `flux.blinkdev.me`).
 
-## Status: Phases 1–4 are implemented and tested
+## Status: Phases 1–5 are implemented and tested
 
 - **Phase 1 — core engine:** `.flux` language (hand-written lexer + parser),
   project detection, pipeline runner, content-hash cache, plugin foundation.
@@ -28,11 +28,33 @@ docs website lives in a separate repo (`flux-web`, deployed at
   policy engine, first-party dev tools (`fmt`/`lint`/`doctor`/`changelog`/
   `version`/`deps`), pipeline templates, Blink/Killer auto-integration,
   plugin PDK, `status`/`graph`.
+- **Phase 5 — AI-native platform:** repository intelligence (`flux project`,
+  `intel/`), knowledge graph (`knowledge/` → `.flux-cache/knowledge/*.json`),
+  honest heuristic AI agents (`agents/`: planner/reviewer/tester/documentation/
+  maintenance/release, reports to `.flux-cache/reports/`), `flux ask` (`ask/`),
+  GitHub integration (`github/`, local + `gh`), docs engine (`docs_engine/`,
+  regenerates `docs/commands.md`/`agents.md`/`manifest.json`), and a static-HTML
+  `flux dashboard` (`dashboard/`). **Flux embeds no LLM** — it makes the repo
+  *AI-legible* and can pipe context to an external `ai.command` from `flux.yaml`.
 
 **Deliberately deferred** (documented as non-goals in `docs/architecture.md`):
-cross-machine distributed execution (gRPC), web dashboard, REST API & SDKs,
-visual pipeline editor, live notification delivery, enterprise teams/RBAC,
-hosted plugin-marketplace fetch. Don't fake these with stubs that print success.
+cross-machine distributed execution (gRPC), *served* web dashboard, REST API &
+SDKs, visual pipeline editor, live notification delivery, enterprise teams/RBAC,
+hosted plugin-marketplace fetch, a **hosted GitHub App**, and an **embedded LLM**
+(use `ai.command` instead). Production APM (`incident`/`monitor` as live
+monitors) is also out. Don't fake any of these with stubs that print success.
+
+## Platform config & layout (Phase 5)
+
+`.flux` (the pipeline) is a **file**, so the AI layer can't use a `.flux/`
+directory — it would collide. Instead:
+- `flux.yaml` — committed platform config (project, agents, `ai.provider`/
+  `ai.command`, github, deployment). Parsed by a hand-rolled YAML-subset reader
+  in `platform/` (no YAML crate → stays `windows-sys`-free).
+- `.flux.d/{agents,rules,memory}/` — committed, authored platform assets.
+- `.flux-cache/{knowledge,reports}/` — generated, git-ignored.
+`flux agent` now means **AI agents**; local runner registration moved to
+`flux runners start` / `flux runners list`.
 
 ## Build & test
 
@@ -93,6 +115,15 @@ src/
   integrations/ Blink/Killer auto-detection
   tools/      fmt/lint/doctor/changelog/version/deps
   plugins/    registry + install + PDK scaffolding
+  platform/   flux.yaml config (hand-rolled YAML-subset parser)
+  fsutil.rs   shared ignore-aware directory walker
+  intel/      repository intelligence (languages/deps/git/health)
+  knowledge/  knowledge-graph JSON writer (+ json.rs)
+  agents/     AI agent framework + built-in heuristic agents
+  ask/        `flux ask` context bundle + offline answerer
+  github/     CI scaffolding, PR review, issue planning (local + gh)
+  docs_engine/ regenerate docs + manifest.json from live sources
+  dashboard/  self-contained static-HTML project dashboard
 docs/         flux-language.md, architecture.md   (authoritative reference)
 tests/        integration.rs (drives the built binary)
 ```

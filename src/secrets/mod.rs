@@ -11,8 +11,8 @@
 //! (git-ignored). This protects secrets from *casual* exposure — they are never
 //! stored in plaintext, won't show up in `grep`, and won't be committed. It is
 //! **not** protection against an attacker who already has read access to the
-//! project's `.flux-cache/` directory. For that, a future phase would source
-//! the key from an OS keychain or an env-provided master key.
+//! project's `.flux-cache/` directory. For that, the key would need to come
+//! from an OS keychain or an env-provided master key.
 
 mod chacha20;
 

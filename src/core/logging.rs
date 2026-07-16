@@ -51,7 +51,7 @@ pub const CROSS: &str = "\u{2717}"; // ✗
 pub const ARROW: &str = "\u{25b6}"; // ▶
 pub const DOT: &str = "\u{2022}"; // •
 
-/// A top-of-command banner, e.g. `Flux v0.1`.
+/// A top-of-command banner, e.g. `Flux v0.2`.
 pub fn banner(subtitle: &str) {
     println!("{} {}", bold(&cyan("Flux")), dim(subtitle));
 }

@@ -1,6 +1,6 @@
 # Contributing to Flux
 
-Thanks for your interest in Flux! It's an early (v0.1) open-source project and
+Thanks for your interest in Flux! It's an open-source project (v0.2) and
 contributions are welcome — bug reports, docs, tests, and code.
 
 ## Development setup

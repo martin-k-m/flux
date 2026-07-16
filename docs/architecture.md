@@ -26,7 +26,18 @@ flux/
 ├── policy/       policy engine (require tests/security/approvals)
 ├── integrations/ Blink/Killer auto-detection
 ├── tools/        first-party dev tools (fmt/lint/doctor/changelog/version/deps)
-└── plugins/      plugin registry + install + PDK scaffolding
+├── plugins/      plugin registry + install + PDK scaffolding
+│
+│   ---- Phase 5: AI-native platform ----
+├── platform/     flux.yaml config (hand-rolled YAML-subset parser)
+├── fsutil        shared, ignore-aware directory walker
+├── intel/        repository intelligence (languages/deps/git/health score)
+├── knowledge/    knowledge-graph writer → .flux-cache/knowledge/*.json (+ json)
+├── agents/       AI agent framework + built-in heuristic agents
+├── ask/          `flux ask` — context bundle + offline answerer
+├── github/       CI scaffolding, PR review, issue planning (local + `gh`)
+├── docs_engine/  regenerate reference docs + manifest.json from live sources
+└── dashboard/    self-contained static-HTML project dashboard
 ```
 
 ## Execution flow
@@ -111,19 +122,68 @@ Worker count defaults to the core count (capped at 16).
   `doctor` (environment checks). The logic pieces are unit-tested directly.
 - **PDK (`plugins::create`)** — scaffolds a plugin project.
 
+## AI-native platform layer (Phase 5)
+
+Flux becomes **AI-legible** without embedding a model. It writes a structured,
+deterministic description of the project that external AI agents (or humans)
+consume, and ships honest heuristic agents that can optionally delegate to a
+user-configured external model.
+
+- **Platform config (`platform`)** — a committed `flux.yaml` (project, agents,
+  `ai.provider`/`ai.command`, github, deployment), parsed by a hand-rolled
+  YAML-subset reader to stay `windows-sys`-free. Authored assets live in
+  `.flux.d/`; generated artifacts live in git-ignored `.flux-cache/`. (`.flux`
+  stays the pipeline *file* — a `.flux/` directory would collide with it.)
+- **Intelligence (`intel`)** — walks the tree and reads manifests to report
+  languages, dependency inventory, inferred components + edges (Rust `use
+  crate::x`), git activity, and a **deterministic, weighted health score**. Every
+  point is attributable to a signal; nothing is guessed or fetched from the
+  network, so `flux project` is reproducible.
+- **Knowledge graph (`knowledge`)** — serialises the analysis to
+  `.flux-cache/knowledge/{architecture,dependencies,patterns,history,decisions}.json`
+  via a tiny hand-written JSON writer. `decisions.json` is seeded once and never
+  clobbered, so an AI/human can append to it.
+- **Agents (`agents`)** — an `Agent` trait + registry (planner, reviewer, tester,
+  documentation, maintenance, release). Each produces a structured report to
+  `.flux-cache/reports/`, clearly labelled heuristic. When `ai.command` is set,
+  `agents::run` pipes the report's context to that external CLI on stdin and
+  appends the reply — the heuristic report is always produced first, so this only
+  ever *adds* signal (honest degradation, like docker/kubectl).
+- **Ask (`ask`)** — assembles a context bundle (`flux ask --context` prints it)
+  and either pipes it to `ai.command` or answers offline by routing common
+  questions to data Flux already has (`assist` for failures, maintenance gaps for
+  "what next", the bundle for "explain").
+- **GitHub (`github`)** — generates a CI workflow + PR template, reviews the
+  working tree (or a PR via the `gh` CLI), and turns an issue/description into a
+  plan. It never *posts* on your behalf — publishing stays an explicit `gh` step.
+- **Docs engine (`docs_engine`)** — regenerates `docs/commands.md` (from the real
+  clap tree), `docs/agents.md` (from the registry), and `docs/manifest.json` (the
+  machine-readable feed for the separate `flux-web` site). `flux docs --check`
+  fails on drift so CI can guard it.
+- **Dashboard (`dashboard`)** — renders a self-contained static HTML file (inline
+  CSS, no network) from the same intelligence. A real local artifact, not a served
+  app.
+
 ## Deliberate non-goals for these phases
 
 - **Distributed execution (2.3 / 3.1 networking)** — real gRPC controller/agents,
   heartbeats, a job queue, auth, encrypted transport, and cross-machine pool
   scheduling. Foundation: the local runner model, runner pools, and the parallel
   engine.
-- **Web dashboard (2.8) / Cloud (2.9)** — a React/TS front end and hosted
-  service. Foundation: the CLI and the `.flux-cache/` state it would read.
+- **Served web dashboard (2.8) / Cloud (2.9)** — a hosted React/TS service. The
+  honest local substitute is `flux dashboard` (a self-contained static HTML file).
 - **Enterprise teams/RBAC (3.10) / hosted marketplace fetch (3.4)** — need real
   identity and a registry service; `flux plugin install` records intent locally.
 - **REST API & SDKs (4.16), visual pipeline editor (4.13), live notifications
   (4.12)** — a hosted HTTP server, a web front end, and outbound network calls.
   The CLI and `.flux-cache/` state are the data model these would build on.
+- **Hosted GitHub App / embedded LLM (5.x)** — a Flux App running on GitHub's
+  servers, and a language model inside Flux. Both need infrastructure Flux
+  deliberately avoids (a server; network + `windows-sys` crypto deps). The honest
+  substitutes: `flux github` (local generation + the `gh` CLI) and the external
+  `ai.command` provider — Flux prepares AI-legible context; the model lives
+  outside. `incident`/`monitor` as *production* APM stay out for the same reason;
+  `flux rollback` redeploys a prior release through the existing deploy path.
 
 ## Toolchain note
 

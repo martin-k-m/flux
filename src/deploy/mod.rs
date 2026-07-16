@@ -119,11 +119,9 @@ fn deploy_kubernetes(root: &Path, project: &str, deployment: &Deployment) -> Dep
 }
 
 fn deploy_vm(target: &str) -> DeployResult {
-    log::fail_line(&format!(
-        "'{target}' deploy target is not implemented in this phase"
-    ));
+    log::fail_line(&format!("'{target}' deploy target is not supported"));
     log::info_line(&format!(
-        "  {} cloud-VM deploys (SSH/rsync/systemd) are planned for a later phase",
+        "  {} cloud-VM deploys (SSH/rsync/systemd) are out of scope — use the local, docker, or kubernetes targets",
         log::dim(log::DOT)
     ));
     DeployResult {

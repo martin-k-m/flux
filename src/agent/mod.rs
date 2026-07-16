@@ -1,16 +1,15 @@
-//! Flux Runner System (2.2) — local agents.
+//! Flux Runner System — local agents.
 //!
-//! The vision is a Flux controller assigning jobs to worker machines
-//! (`flux agent start` turns a machine into a worker). True cross-machine
-//! distribution (gRPC, heartbeats, a job queue, auth) is a later phase and
-//! can't be meaningfully exercised in a single-machine sandbox, so this module
-//! implements the **local** runner model honestly:
+//! Flux runs pipeline steps on the local machine's cores. True cross-machine
+//! distribution (a controller assigning jobs to workers over gRPC, with
+//! heartbeats, a job queue, and auth) is out of scope; this module implements
+//! the **local** runner model honestly:
 //!
-//! * `flux agent start` registers *this* machine as an available runner and
+//! * `flux runners start` registers *this* machine as an available runner and
 //!   reports its capacity;
-//! * the graph engine already schedules pipeline steps across this runner's
-//!   cores (that is the local worker);
-//! * `flux agent list` shows the registered runners.
+//! * the graph engine schedules pipeline steps across this runner's cores (that
+//!   is the local worker);
+//! * `flux runners list` shows the registered runners.
 //!
 //! Registrations are recorded under `.flux-cache/runners/`.
 

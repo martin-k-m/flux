@@ -6,10 +6,38 @@ All notable changes to Flux are documented here. The format is based on
 
 ## [Unreleased]
 
-Platform consolidation & release automation (Phase 6). Additive — no breaking
-changes.
+## [0.2.0] — 2026-07-16
+
+**AI-native platform (Phase 5).** Flux becomes AI-legible without embedding a
+model. Mostly additive; one intentional rename (see *Changed*).
 
 ### Added
+
+- **Repository intelligence (`flux project`, `--json`)** — languages,
+  architecture with dependency edges, dependency inventory, git activity, and a
+  deterministic weighted **health score**. Writes a knowledge graph to
+  `.flux-cache/knowledge/*.json`.
+- **AI agents (`flux agent list|run|status|create|install`)** — honest heuristic
+  analyzers (`planner`, `reviewer`, `tester`, `documentation`, `maintenance`,
+  `release`) that write structured reports to `.flux-cache/reports/`. With
+  `ai.command` set in `flux.yaml`, each report is expanded by an external model.
+- **`flux ask "…"`** — natural-language front door; `--context` prints the raw
+  context bundle for any tool. Answers offline or via `ai.command`.
+- **`flux github init|review|plan`** — local CI scaffolding, working-tree/PR
+  review, and issue → plan (optional `gh` CLI enrichment; never auto-posts).
+- **`flux docs [--check]`** — regenerates `docs/commands.md`, `docs/agents.md`,
+  and a `docs/manifest.json` feed from live sources; `--check` guards drift.
+- **`flux dashboard`** — a self-contained static HTML project report (no network).
+- **`flux rollback`** — redeploy the previous release through the deploy path.
+- **Platform config** — `flux init` now scaffolds `flux.yaml` and `.flux.d/`
+  (authored assets) alongside the `.flux` pipeline.
+
+### Changed
+
+- **`flux agent` now runs AI agents.** Local build-runner registration moved to
+  **`flux runners start`** (and `flux runners list`).
+
+### Phase 6 — platform consolidation & release automation
 
 - **`flux verify`** (`--release`, `--full`) — run the project's full check suite
   (format, lint, tests; release build; validate examples).
