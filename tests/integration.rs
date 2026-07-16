@@ -149,13 +149,21 @@ fn secret_is_injected_into_step_env() {
         "Cargo.toml",
         "[package]\nname = \"s\"\nversion = \"0.1.0\"\n",
     );
-    // Windows `echo %VAR%` expands the env var we inject.
+    // Expand the injected env var in a shell-appropriate way: `%VAR%` on the
+    // Windows `cmd` shell, `$VAR` on the POSIX `sh` shell.
+    let echo = if cfg!(windows) {
+        "echo token=%TOKEN%"
+    } else {
+        "echo token=$TOKEN"
+    };
     write(
         &dir,
         ".flux",
-        "project \"s\"\nlanguage rust\nsecret TOKEN\npipeline {\n\
-           step show { command \"echo token=%TOKEN%\" env [ TOKEN ] }\n\
-         }\n",
+        &format!(
+            "project \"s\"\nlanguage rust\nsecret TOKEN\npipeline {{\n\
+               step show {{ command \"{echo}\" env [ TOKEN ] }}\n\
+             }}\n"
+        ),
     );
 
     let (set_out, set_ok) = run(&dir, &["secret", "set", "TOKEN", "abc123"]);
