@@ -77,19 +77,64 @@ pub fn for_language(language: &str) -> Option<Box<dyn Plugin>> {
     registry().into_iter().find(|p| p.id() == language)
 }
 
-/// Plugin names known to the (future) plugin marketplace. Installing one today
-/// records it locally; a later phase will fetch and load real behaviour.
-const KNOWN: &[&str] = &[
-    "aws",
-    "docker",
-    "kubernetes",
-    "terraform",
-    "npm",
-    "cargo",
-    "python",
-    "gcp",
-    "azure",
+/// The plugin catalog: `(name, category)`. Installing one today records it
+/// locally; a hosted marketplace that fetches real plugin code is future work.
+const CATALOG: &[(&str, &str)] = &[
+    ("docker", "container"),
+    ("kubernetes", "infrastructure"),
+    ("terraform", "infrastructure"),
+    ("helm", "infrastructure"),
+    ("aws", "cloud"),
+    ("gcp", "cloud"),
+    ("azure", "cloud"),
+    ("cloudflare", "cloud"),
+    ("npm", "language"),
+    ("cargo", "language"),
+    ("python", "language"),
 ];
+
+fn known(name: &str) -> bool {
+    CATALOG.iter().any(|(n, _)| *n == name)
+}
+
+/// Search the catalog by name or category substring.
+pub fn search(query: &str) -> Vec<(&'static str, &'static str)> {
+    let q = query.to_lowercase();
+    CATALOG
+        .iter()
+        .copied()
+        .filter(|(n, c)| n.contains(&q) || c.contains(&q))
+        .collect()
+}
+
+/// The result of verifying one installed plugin.
+pub struct PluginCheck {
+    pub name: String,
+    pub ok: bool,
+    pub detail: String,
+}
+
+/// Verify that installed plugin manifests are well-formed.
+pub fn verify(root: &std::path::Path) -> Vec<PluginCheck> {
+    installed(root)
+        .into_iter()
+        .map(|name| {
+            let path = plugins_dir(root).join(format!("{name}.plugin"));
+            let ok = std::fs::read_to_string(&path)
+                .map(|t| t.contains("name ="))
+                .unwrap_or(false);
+            PluginCheck {
+                name,
+                ok,
+                detail: if ok {
+                    "manifest ok".into()
+                } else {
+                    "malformed or missing manifest".into()
+                },
+            }
+        })
+        .collect()
+}
 
 fn plugins_dir(root: &std::path::Path) -> std::path::PathBuf {
     root.join(".flux-cache").join("plugins")
@@ -98,10 +143,11 @@ fn plugins_dir(root: &std::path::Path) -> std::path::PathBuf {
 /// Record a plugin as installed for this project. Returns an error for a name
 /// the marketplace doesn't recognise (so typos fail loudly).
 pub fn install(root: &std::path::Path, name: &str) -> anyhow::Result<()> {
-    if !KNOWN.contains(&name) {
+    if !known(name) {
+        let names: Vec<&str> = CATALOG.iter().map(|(n, _)| *n).collect();
         anyhow::bail!(
             "unknown plugin '{name}'. Known plugins: {}",
-            KNOWN.join(", ")
+            names.join(", ")
         );
     }
     let dir = plugins_dir(root);

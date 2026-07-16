@@ -145,9 +145,30 @@ enum Command {
     /// Inspect project dependencies.
     Deps,
     /// Diagnose the environment, toolchains, and Flux setup.
-    Doctor,
+    Doctor {
+        /// Run repository-wide health checks (CI, examples, docs, release config).
+        #[arg(long)]
+        all: bool,
+    },
     /// Validate the `.flux` file (syntax, pipeline graph, references).
     Validate,
+    /// Run the project's full check suite (fmt, clippy, tests).
+    Verify {
+        /// Also build in release mode.
+        #[arg(long)]
+        release: bool,
+        /// Also validate example projects and build release.
+        #[arg(long)]
+        full: bool,
+    },
+    /// Explain the pipeline in plain language.
+    Explain,
+    /// Canonically format the `.flux` file in place.
+    Format {
+        /// Only check formatting; don't write. Exits non-zero if unformatted.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -227,6 +248,10 @@ enum PluginAction {
     Install { name: String },
     /// Scaffold a new plugin with the PDK.
     Create { name: String },
+    /// Search the plugin catalog.
+    Search { query: String },
+    /// Verify installed plugin manifests.
+    Verify,
 }
 
 /// Entry point invoked by `main`. Returns the process exit code.
@@ -269,8 +294,11 @@ pub fn run() -> i32 {
         Command::Changelog => cmd_changelog(&cwd),
         Command::Version { part } => cmd_version(&cwd, &part),
         Command::Deps => cmd_deps(&cwd),
-        Command::Doctor => cmd_doctor(&cwd),
+        Command::Doctor { all } => cmd_doctor(&cwd, all),
         Command::Validate => cmd_validate(&cwd),
+        Command::Verify { release, full } => cmd_verify(&cwd, release, full),
+        Command::Explain => cmd_explain(&cwd),
+        Command::Format { check } => cmd_format(&cwd, check),
     };
 
     match result {
@@ -1012,6 +1040,46 @@ fn cmd_plugin(root: &Path, action: PluginAction) -> anyhow::Result<i32> {
             }
             Ok(0)
         }
+        PluginAction::Search { query } => {
+            let results = crate::plugins::search(&query);
+            log::banner(VERSION_LABEL);
+            log::heading(&format!("Plugins matching '{query}':"));
+            if results.is_empty() {
+                log::info_line(&format!("  {} no matches", log::dim(log::DOT)));
+            }
+            for (name, category) in results {
+                println!(
+                    "  {} {}  {}",
+                    log::green(log::CHECK),
+                    log::bold(name),
+                    log::dim(&format!("[{category}]"))
+                );
+            }
+            log::info_line(&format!(
+                "\n  {}",
+                log::dim("Install with `flux plugin install <name>`.")
+            ));
+            Ok(0)
+        }
+        PluginAction::Verify => {
+            let checks = crate::plugins::verify(root);
+            log::banner(VERSION_LABEL);
+            log::heading("Installed plugins:");
+            if checks.is_empty() {
+                log::info_line(&format!("  {} none installed", log::dim(log::DOT)));
+                return Ok(0);
+            }
+            let mut bad = 0;
+            for c in &checks {
+                if c.ok {
+                    log::ok_line(&format!("{}  {}", c.name, log::dim(&c.detail)));
+                } else {
+                    bad += 1;
+                    log::fail_line(&format!("{}  {}", c.name, log::dim(&c.detail)));
+                }
+            }
+            Ok(if bad == 0 { 0 } else { 1 })
+        }
     }
 }
 
@@ -1287,11 +1355,14 @@ fn cmd_deps(root: &Path) -> anyhow::Result<i32> {
     Ok(0)
 }
 
-fn cmd_doctor(root: &Path) -> anyhow::Result<i32> {
+fn cmd_doctor(root: &Path, all: bool) -> anyhow::Result<i32> {
     let detection = detect::detect(root);
-    let checks = tools::doctor::run(root, &detection);
+    let mut checks = tools::doctor::run(root, &detection);
+    if all {
+        checks.extend(tools::doctor::repository_checks(root));
+    }
     log::banner(&format!("{VERSION_LABEL}  ·  doctor"));
-    log::heading("Checks:");
+    log::heading(if all { "Repository Health:" } else { "Checks:" });
     let mut failures = 0;
     for c in &checks {
         if c.ok {
@@ -1301,16 +1372,20 @@ fn cmd_doctor(root: &Path) -> anyhow::Result<i32> {
             log::fail_line(&format!("{}  {}", c.name, log::dim(&c.detail)));
         }
     }
+    let total = checks.len().max(1);
+    let health = ((total - failures) * 100) / total;
     if failures == 0 {
         println!(
-            "\n{}",
-            log::green(&format!("{} Everything looks healthy", log::CHECK))
+            "\n{}  {}",
+            log::green(&format!("{} Everything looks healthy", log::CHECK)),
+            log::dim(&format!("({health}%)"))
         );
         Ok(0)
     } else {
         println!(
-            "\n{}",
-            log::yellow(&format!("{failures} check(s) need attention"))
+            "\n{}  {}",
+            log::yellow(&format!("{failures} check(s) need attention")),
+            log::dim(&format!("(health {health}%)"))
         );
         Ok(1)
     }
@@ -1354,6 +1429,159 @@ fn cmd_validate(root: &Path) -> anyhow::Result<i32> {
     if !config.secrets.is_empty() {
         log::field("Secrets declared", &config.secrets.len().to_string());
     }
+    Ok(0)
+}
+
+/// `flux verify` — run the project's full check suite (6.2).
+fn cmd_verify(root: &Path, release: bool, full: bool) -> anyhow::Result<i32> {
+    let language = require_language(root)?;
+    log::banner(&format!("{VERSION_LABEL}  ·  verify"));
+
+    // Language-appropriate checks.
+    let mut checks: Vec<(&str, String)> = match language.as_str() {
+        "rust" => vec![
+            ("format", "cargo fmt --all -- --check".into()),
+            ("clippy", "cargo clippy --all-targets -- -D warnings".into()),
+            ("tests", "cargo test".into()),
+        ],
+        "node" => vec![
+            ("lint", "npx --yes eslint .".into()),
+            ("tests", "npm test".into()),
+        ],
+        "python" => vec![("tests", "python -m unittest discover".into())],
+        other => anyhow::bail!("`flux verify` doesn't know how to check '{other}' projects yet"),
+    };
+    if (release || full) && language == "rust" {
+        checks.push(("release build", "cargo build --release".into()));
+    }
+
+    let mut failed = 0;
+    for (name, cmd) in &checks {
+        log::info_line(&format!(
+            "  {} {}  {}",
+            log::cyan(log::ARROW),
+            name,
+            log::dim(cmd)
+        ));
+        match crate::runners::shell::run(cmd, root) {
+            Ok(r) if r.success => log::ok_line(name),
+            _ => {
+                log::fail_line(&format!("{name} failed"));
+                failed += 1;
+            }
+        }
+    }
+
+    // `--full` also validates every example project.
+    if full {
+        log::heading("Examples:");
+        let examples = root.join("examples");
+        if let Ok(entries) = std::fs::read_dir(&examples) {
+            for e in entries.flatten() {
+                let p = e.path();
+                let flux = p.join(config::CONFIG_FILE);
+                if !flux.is_file() {
+                    continue;
+                }
+                let name = p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("?")
+                    .to_string();
+                match validate_flux(&p) {
+                    Ok(()) => log::ok_line(&name),
+                    Err(e) => {
+                        log::fail_line(&format!("{name}: {e}"));
+                        failed += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if failed == 0 {
+        println!("\n{}", log::green(&format!("{} Verify passed", log::CHECK)));
+        Ok(0)
+    } else {
+        println!(
+            "\n{}",
+            log::red(&format!("{} {failed} check(s) failed", log::CROSS))
+        );
+        Ok(1)
+    }
+}
+
+/// Parse + graph-validate a `.flux` in `dir` without printing.
+fn validate_flux(dir: &Path) -> anyhow::Result<()> {
+    let cfg = config::load(&dir.join(config::CONFIG_FILE))?;
+    if !cfg.steps.is_empty() {
+        Graph::build(&cfg.steps).map_err(|e| anyhow::anyhow!("{e}"))?;
+    }
+    Ok(())
+}
+
+/// `flux explain` — describe the pipeline in plain language (6.12).
+fn cmd_explain(root: &Path) -> anyhow::Result<i32> {
+    let (_, _, pipeline) = load_context(root)?;
+    ensure_runnable(&pipeline)?;
+    let graph =
+        Graph::build(&pipeline.steps).map_err(|e| anyhow::anyhow!("invalid pipeline: {e}"))?;
+
+    log::banner(&format!("{VERSION_LABEL}  ·  explain"));
+    println!(
+        "\n{} is a {} project. Its pipeline has {} step(s){}.\n",
+        log::bold(&pipeline.project),
+        language_label(&pipeline.language),
+        pipeline.steps.len(),
+        if graph.is_explicit() {
+            ", run as a dependency graph (independent steps in parallel)"
+        } else {
+            ", run in order"
+        }
+    );
+    for name in graph.topo_order() {
+        if let Some(step) = pipeline.steps.iter().find(|s| s.name == name) {
+            print!("  {} {}", log::cyan(log::DOT), log::bold(&step.name));
+            if let Some(cmd) = &step.command {
+                print!(" runs {}", log::dim(&format!("`{cmd}`")));
+            } else if let Some(tool) = &step.tool {
+                print!(" invokes the {} tool", log::dim(tool));
+            }
+            if !step.needs.is_empty() {
+                print!(" after {}", step.needs.join(", "));
+            }
+            if let Some(cond) = &step.only_if {
+                print!(", only if {}", cond.describe());
+            }
+            if step.retries > 0 {
+                print!(", retrying up to {} time(s)", step.retries);
+            }
+            println!(".");
+        }
+    }
+    Ok(0)
+}
+
+/// `flux format` — canonically format the `.flux` file (6.12).
+fn cmd_format(root: &Path, check: bool) -> anyhow::Result<i32> {
+    let path = root.join(config::CONFIG_FILE);
+    let src = std::fs::read_to_string(&path)
+        .map_err(|e| anyhow::anyhow!("could not read {}: {e}", path.display()))?;
+    // Format the raw file (not module-resolved), so `use` and structure survive.
+    let cfg = config::parse(&src).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+    let formatted = render_config(&cfg);
+
+    log::banner(&format!("{VERSION_LABEL}  ·  format"));
+    if src == formatted {
+        log::ok_line(".flux is already formatted");
+        return Ok(0);
+    }
+    if check {
+        log::fail_line(".flux is not formatted (run `flux format`)");
+        return Ok(1);
+    }
+    std::fs::write(&path, formatted)?;
+    log::ok_line("Formatted .flux");
     Ok(0)
 }
 
@@ -1567,6 +1795,104 @@ fn pass_fail(ok: bool) -> String {
     } else {
         log::red("FAIL")
     }
+}
+
+/// Render a parsed config back to canonical `.flux` text (used by `flux format`).
+fn render_config(cfg: &FluxConfig) -> String {
+    let mut out = String::new();
+    if let Some(p) = &cfg.project {
+        out.push_str(&format!("project \"{p}\"\n"));
+    }
+    if let Some(l) = &cfg.language {
+        out.push_str(&format!("language {l}\n"));
+    }
+    for i in &cfg.imports {
+        out.push_str(&format!("import {i}\n"));
+    }
+    if let Some(env) = &cfg.environment {
+        if let Some(img) = &env.image {
+            out.push_str(&format!("\nenvironment {{ image \"{img}\" }}\n"));
+        }
+    }
+    for s in &cfg.secrets {
+        out.push_str(&format!("secret {s}\n"));
+    }
+
+    if !cfg.uses.is_empty() || !cfg.steps.is_empty() {
+        out.push_str("\npipeline {\n");
+        for u in &cfg.uses {
+            out.push_str(&format!("    use {u}\n"));
+        }
+        for step in &cfg.steps {
+            out.push_str(&format!("    step {} {{\n", step.name));
+            if let Some(d) = &step.description {
+                out.push_str(&format!("        description \"{d}\"\n"));
+            }
+            if let Some(c) = &step.command {
+                out.push_str(&format!("        command \"{c}\"\n"));
+            }
+            if let Some(t) = &step.tool {
+                out.push_str(&format!("        tool {t}\n"));
+            }
+            if !step.needs.is_empty() {
+                out.push_str(&format!("        needs [ {} ]\n", step.needs.join(", ")));
+            }
+            if !step.inputs.is_empty() {
+                let quoted: Vec<String> = step.inputs.iter().map(|i| format!("\"{i}\"")).collect();
+                out.push_str(&format!("        inputs [ {} ]\n", quoted.join(", ")));
+            }
+            if !step.env.is_empty() {
+                out.push_str(&format!("        env [ {} ]\n", step.env.join(", ")));
+            }
+            if let Some(cond) = &step.only_if {
+                out.push_str(&format!("        only_if {}\n", cond.describe()));
+            }
+            if step.retries > 0 {
+                out.push_str(&format!("        retries {}\n", step.retries));
+            }
+            if let Some(pool) = &step.pool {
+                out.push_str(&format!("        pool \"{pool}\"\n"));
+            }
+            if !step.cache {
+                out.push_str("        cache off\n");
+            }
+            out.push_str("    }\n");
+        }
+        out.push_str("}\n");
+    }
+
+    if let Some(dep) = &cfg.deployment {
+        out.push_str("\ndeployment {");
+        if let Some(t) = &dep.target {
+            out.push_str(&format!(" target {t}"));
+        }
+        if let Some(r) = dep.replicas {
+            out.push_str(&format!(" replicas {r}"));
+        }
+        if let Some(img) = &dep.image {
+            out.push_str(&format!(" image \"{img}\""));
+        }
+        out.push_str(" }\n");
+    }
+
+    for policy in &cfg.policies {
+        out.push_str(&format!("\npolicy {} {{\n", policy.name));
+        if policy.require_tests {
+            out.push_str("    require tests\n");
+        }
+        if policy.require_security {
+            out.push_str("    require security\n");
+        }
+        if policy.require_approvals > 0 {
+            out.push_str(&format!(
+                "    require approvals {}\n",
+                policy.require_approvals
+            ));
+        }
+        out.push_str("}\n");
+    }
+
+    out
 }
 
 /// Generate `.flux` file contents from resolved defaults, advertising the

@@ -1,0 +1,21 @@
+{
+  "version": "0.1.0",
+  "description": "Local-first developer automation platform",
+  "homepage": "https://github.com/martin-k-m/flux",
+  "license": "Apache-2.0",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/martin-k-m/flux/releases/download/v0.1.0/flux-x86_64-pc-windows-msvc.zip",
+      "bin": "flux.exe"
+    }
+  },
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/martin-k-m/flux/releases/download/v$version/flux-x86_64-pc-windows-msvc.zip"
+      }
+    }
+  },
+  "_comment": "Requires a release that includes Windows binaries. The Release workflow (.github/workflows/release.yml) produces flux-x86_64-pc-windows-msvc.zip on each version tag."
+}

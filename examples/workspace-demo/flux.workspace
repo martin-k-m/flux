@@ -1,0 +1,4 @@
+workspace "demo"
+
+member shared { path "shared" }
+member api    { path "api" needs [ shared ] }
