@@ -3,9 +3,18 @@ name = "flux"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.74"
-description = "A local-first software automation engine: build, test, and package apps consistently."
+description = "A local-first developer automation platform: build, test, package, and deploy projects from a single .flux file."
 license = "Apache-2.0"
 readme = "README.md"
+repository = "https://github.com/martin-k-m/flux"
+homepage = "https://flux.blinkdev.me"
+documentation = "https://github.com/martin-k-m/flux/tree/main/docs"
+keywords = ["build", "ci", "automation", "cli", "pipeline"]
+categories = [
+    "command-line-utilities",
+    "development-tools::build-utils",
+    "development-tools",
+]
 
 [[bin]]
 name = "flux"
