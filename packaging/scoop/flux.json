@@ -1,11 +1,12 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local-first developer automation platform",
   "homepage": "https://github.com/martin-k-m/flux",
   "license": "Apache-2.0",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/martin-k-m/flux/releases/download/v0.1.0/flux-x86_64-pc-windows-msvc.zip",
+      "url": "https://github.com/martin-k-m/flux/releases/download/v0.2.0/flux-x86_64-pc-windows-msvc.zip",
+      "hash": "73e2457aa972a9d2b7ce01fcd47684b5611d4f7e3989c82dbc517141f5d73544",
       "bin": "flux.exe"
     }
   },

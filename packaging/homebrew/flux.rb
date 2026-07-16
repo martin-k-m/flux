@@ -5,8 +5,8 @@
 class Flux < Formula
   desc "Local-first developer automation platform"
   homepage "https://github.com/martin-k-m/flux"
-  url "https://github.com/martin-k-m/flux/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "bb2360b0cc4e3e9ae3d685fd8cb15c0396f4ed2190c84143ddd67133679288a6"
+  url "https://github.com/martin-k-m/flux/archive/refs/tags/v0.2.0.tar.gz"
+  sha256 "078d17d357755e1ddcfdba7d2a4a7610d1a8b80debe9e6ac2932350a0e44e99a"
   license "Apache-2.0"
   head "https://github.com/martin-k-m/flux.git", branch: "main"
 

@@ -102,4 +102,5 @@ Cross-machine distributed execution, a web dashboard, a REST API & SDKs, a visua
 pipeline editor, live notification delivery, enterprise teams/RBAC, a hosted
 plugin marketplace, and a prebuilt installer. See the README roadmap.
 
+[0.2.0]: https://github.com/martin-k-m/flux/releases/tag/v0.2.0
 [0.1.0]: https://github.com/martin-k-m/flux/releases/tag/v0.1.0
