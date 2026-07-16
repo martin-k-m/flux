@@ -182,10 +182,44 @@ Pipeline:
 | Node     | `package.json`                        | `npm install` → `npm run build` → `npm test`           |
 | Python   | `requirements.txt` / `pyproject.toml` | `pip install -r …` → compile → `pytest`                |
 
+## Examples
+
+Runnable sample projects live in [`examples/`](examples/) — [rust-app](examples/rust-app),
+[node-app](examples/node-app), [python-app](examples/python-app). From any of them:
+
+```sh
+flux validate    # check the .flux
+flux build       # run the pipeline
+flux test        # run the test step
+```
+
+## Roadmap
+
+**Available now (v0.1)**
+
+- ✅ `.flux` configuration language + `flux validate`
+- ✅ Dependency-graph pipeline engine (parallel, `needs`, retries, `only_if`)
+- ✅ Intelligent build cache (input scoping + graph-aware invalidation)
+- ✅ Modules, artifacts & releases, encrypted secrets, reproducibility lock
+- ✅ Deployment dispatch, workspaces, policy engine
+- ✅ First-party tools (`fmt`/`lint`/`doctor`/`changelog`/`version`/`deps`)
+- ✅ Plugins + PDK, local runners, Blink/Killer integration
+
+**Coming soon**
+
+- ○ Cross-machine distributed runners
+- ○ Web dashboard & build insights
+- ○ REST API & SDKs
+- ○ Hosted plugin marketplace
+- ○ Advanced deployment targets & rollbacks
+- ○ Team workflows
+- ○ Prebuilt installer (`cargo install` / Homebrew / one-line script)
+
 ## Documentation
 
 - [The `.flux` language](docs/flux-language.md)
 - [Architecture](docs/architecture.md)
+- [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 ## Scope & honesty
 
