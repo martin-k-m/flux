@@ -352,3 +352,34 @@ fn init_template_writes_tailored_pipeline() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn validate_accepts_good_and_rejects_bad() {
+    let dir = temp_project("validate");
+    write(
+        &dir,
+        "Cargo.toml",
+        "[package]\nname = \"v\"\nversion = \"0.1.0\"\n",
+    );
+
+    // Valid pipeline.
+    write(
+        &dir,
+        ".flux",
+        "project \"v\"\nlanguage rust\npipeline { step build { command \"cargo build\" } }\n",
+    );
+    let (out, ok) = run(&dir, &["validate"]);
+    assert!(ok, "valid .flux should pass: {out}");
+    assert!(out.contains(".flux is valid"), "{out}");
+
+    // Syntax error → non-zero exit.
+    write(
+        &dir,
+        ".flux",
+        "project \"v\"\npipeline { step build { commnd \"x\" } }\n",
+    );
+    let (bad, bad_ok) = run(&dir, &["validate"]);
+    assert!(!bad_ok, "invalid .flux must fail: {bad}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

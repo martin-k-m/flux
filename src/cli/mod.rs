@@ -29,8 +29,27 @@ use crate::workspace::Workspace;
 use crate::VERSION_LABEL;
 
 /// Flux — a local-first developer automation platform.
+///
+/// Point Flux at a project and it builds, tests, packages, and ships it from a
+/// single `.flux` file. See <https://github.com/martin-k-m/flux>.
 #[derive(Parser, Debug)]
-#[command(name = "flux", version, about, long_about = None)]
+#[command(
+    name = "flux",
+    version,
+    about,
+    long_about = None,
+    after_help = "\
+EXAMPLES:
+  flux init rust-api        Scaffold a .flux from a template
+  flux build                Run the pipeline (parallel dependency graph)
+  flux test                 Run the test step(s)
+  flux validate             Check the .flux for errors
+  flux ci                   Clean, cache-free build; enforces policy
+  flux workspace build      Build affected members of a workspace
+  flux doctor               Diagnose the environment
+
+Run `flux <command> --help` for details on any command."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -127,6 +146,8 @@ enum Command {
     Deps,
     /// Diagnose the environment, toolchains, and Flux setup.
     Doctor,
+    /// Validate the `.flux` file (syntax, pipeline graph, references).
+    Validate,
 }
 
 #[derive(Subcommand, Debug)]
@@ -249,6 +270,7 @@ pub fn run() -> i32 {
         Command::Version { part } => cmd_version(&cwd, &part),
         Command::Deps => cmd_deps(&cwd),
         Command::Doctor => cmd_doctor(&cwd),
+        Command::Validate => cmd_validate(&cwd),
     };
 
     match result {
@@ -1292,6 +1314,47 @@ fn cmd_doctor(root: &Path) -> anyhow::Result<i32> {
         );
         Ok(1)
     }
+}
+
+fn cmd_validate(root: &Path) -> anyhow::Result<i32> {
+    log::banner(&format!("{VERSION_LABEL}  ·  validate"));
+    let path = root.join(config::CONFIG_FILE);
+    if !path.is_file() {
+        log::fail_line("no .flux file found — run `flux init`");
+        return Ok(1);
+    }
+
+    // Syntax + module resolution.
+    let config = match config::load(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            log::fail_line(&format!("{e}"));
+            return Ok(1);
+        }
+    };
+
+    // Semantic checks: the pipeline graph must be valid (no cycles / unknown needs).
+    if !config.steps.is_empty() {
+        if let Err(e) = Graph::build(&config.steps) {
+            log::fail_line(&format!("invalid pipeline: {e}"));
+            return Ok(1);
+        }
+    }
+
+    log::ok_line(".flux is valid");
+    log::field("Project", config.project.as_deref().unwrap_or("(detected)"));
+    log::field(
+        "Language",
+        config.language.as_deref().unwrap_or("(detected)"),
+    );
+    log::field("Steps", &config.steps.len().to_string());
+    if !config.policies.is_empty() {
+        log::field("Policies", &config.policies.len().to_string());
+    }
+    if !config.secrets.is_empty() {
+        log::field("Secrets declared", &config.secrets.len().to_string());
+    }
+    Ok(0)
 }
 
 /// Resolve the project language or bail with a helpful message.
