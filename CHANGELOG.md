@@ -4,6 +4,30 @@ All notable changes to Flux are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Platform consolidation & release automation (Phase 6). Additive — no breaking
+changes.
+
+### Added
+
+- **`flux verify`** (`--release`, `--full`) — run the project's full check suite
+  (format, lint, tests; release build; validate examples).
+- **`flux doctor --all`** — repository-wide health checks (CI, release workflow,
+  examples, docs, community files) with an overall health percentage.
+- **`flux explain`** — describe the pipeline in plain language.
+- **`flux format`** (`--check`) — canonically format a `.flux` file.
+- **`flux plugin search` / `flux plugin verify`** — search the catalog and verify
+  installed plugin manifests.
+- **Release automation** — `.github/workflows/release.yml` builds cross-platform
+  binaries (Linux/macOS/Windows) and attaches them to the GitHub Release on each
+  version tag; `nightly.yml` runs a security audit, build/test, and link check.
+- **Packaging** — `Dockerfile` plus prepared Homebrew/Scoop manifests under
+  `packaging/` (see `packaging/README.md` for publishing status).
+- **Community** — issue/PR templates, `CODE_OF_CONDUCT.md`.
+- **Example** — `examples/workspace-demo` (a `flux.workspace`).
+- Flux now dogfoods itself via a root `.flux`.
+
 ## [0.1.0] — 2026-07-16
 
 First public release. Flux is a local-first developer automation platform: a

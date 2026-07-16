@@ -14,6 +14,70 @@ pub struct Check {
     pub detail: String,
 }
 
+/// Repository-wide health checks (`flux doctor --all`): the things that make a
+/// project releasable — CI, examples, docs, packaging, and community files.
+pub fn repository_checks(root: &Path) -> Vec<Check> {
+    let mut checks = Vec::new();
+
+    let present = |rel: &str| root.join(rel).exists();
+    let mut file_check = |name: &str, rel: &str| {
+        checks.push(Check {
+            name: name.to_string(),
+            ok: present(rel),
+            detail: if present(rel) {
+                rel.to_string()
+            } else {
+                format!("missing {rel}")
+            },
+        });
+    };
+
+    file_check("CI workflow", ".github/workflows/ci.yml");
+    file_check("Release workflow", ".github/workflows/release.yml");
+    file_check("Changelog", "CHANGELOG.md");
+    file_check("Contributing guide", "CONTRIBUTING.md");
+    file_check("Security policy", "SECURITY.md");
+    file_check("Code of conduct", "CODE_OF_CONDUCT.md");
+    file_check("Issue templates", ".github/ISSUE_TEMPLATE");
+    file_check("PR template", ".github/PULL_REQUEST_TEMPLATE.md");
+    file_check("Documentation", "docs");
+
+    // Examples: every example directory must carry a `.flux`.
+    let examples_dir = root.join("examples");
+    if examples_dir.is_dir() {
+        let mut ok = true;
+        let mut missing = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&examples_dir) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_dir() && !p.join(".flux").is_file() && !p.join("flux.workspace").is_file() {
+                    ok = false;
+                    if let Some(n) = p.file_name().and_then(|n| n.to_str()) {
+                        missing.push(n.to_string());
+                    }
+                }
+            }
+        }
+        checks.push(Check {
+            name: "Examples".to_string(),
+            ok,
+            detail: if ok {
+                "all carry a .flux".to_string()
+            } else {
+                format!("missing .flux: {}", missing.join(", "))
+            },
+        });
+    } else {
+        checks.push(Check {
+            name: "Examples".to_string(),
+            ok: false,
+            detail: "no examples/ directory".to_string(),
+        });
+    }
+
+    checks
+}
+
 /// Run all checks for the project at `root`.
 pub fn run(root: &Path, detection: &Detection) -> Vec<Check> {
     let mut checks = Vec::new();

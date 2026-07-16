@@ -391,3 +391,67 @@ fn validate_accepts_good_and_rejects_bad() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn format_is_idempotent() {
+    let dir = temp_project("fmt");
+    write(
+        &dir,
+        "Cargo.toml",
+        "[package]\nname = \"f\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir,
+        ".flux",
+        "project \"f\"\nlanguage rust\npipeline{step build{command \"cargo build\"}step test{needs build command \"cargo test\"}}\n",
+    );
+
+    let (_, ok) = run(&dir, &["format"]);
+    assert!(ok);
+    let (out2, ok2) = run(&dir, &["format", "--check"]);
+    assert!(ok2, "formatted file should pass --check: {out2}");
+    assert!(out2.contains("already formatted"), "{out2}");
+    let cfg = std::fs::read_to_string(dir.join(".flux")).unwrap();
+    assert!(cfg.contains("    step build {"), "{cfg}");
+    assert!(cfg.contains("needs [ build ]"), "{cfg}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn explain_describes_the_pipeline() {
+    let dir = temp_project("explain");
+    write(
+        &dir,
+        "Cargo.toml",
+        "[package]\nname = \"e\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir,
+        ".flux",
+        "project \"e\"\nlanguage rust\npipeline {\n\
+           step build { command \"cargo build\" }\n\
+           step test { needs build command \"cargo test\" }\n\
+         }\n",
+    );
+    let (out, ok) = run(&dir, &["explain"]);
+    assert!(ok, "{out}");
+    assert!(out.contains("2 step"), "{out}");
+    assert!(out.contains("after build"), "{out}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn plugin_search_filters_catalog() {
+    let dir = temp_project("psearch");
+    let (out, ok) = run(&dir, &["plugin", "search", "docker"]);
+    assert!(ok, "{out}");
+    assert!(out.contains("docker"), "{out}");
+    assert!(
+        !out.contains("terraform"),
+        "unrelated plugin should not match: {out}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

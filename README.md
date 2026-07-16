@@ -174,6 +174,25 @@ Pipeline:
 - **Plugin PDK (4.19)** — `flux plugin create <name>` scaffolds a plugin with a
   manifest, source, tests, and README.
 
+## Self-maintenance & release
+
+Flux helps maintain itself and any project it runs on:
+
+- `flux verify [--full]` — run the whole check suite (format, lint, tests,
+  release build, validate examples) in one command.
+- `flux doctor --all` — repository health: CI, release workflow, examples, docs,
+  and community files, with an overall percentage.
+- `flux validate` · `flux format` · `flux explain` — check, canonically format,
+  and describe a `.flux` in plain language.
+- `flux plugin search <q>` · `flux plugin verify` — search the catalog, verify
+  installed plugins.
+
+**Automated releases:** pushing a `vX.Y.Z` tag triggers
+[`release.yml`](.github/workflows/release.yml), which builds Linux/macOS/Windows
+binaries and attaches them to the GitHub Release. A nightly workflow runs a
+security audit, build/test, and a broken-link check. Packaging files (Docker,
+Homebrew, Scoop) live in [`packaging/`](packaging/).
+
 ## Detection
 
 | Language | Detected by                           | Default pipeline                                       |

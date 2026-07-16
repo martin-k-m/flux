@@ -9,11 +9,12 @@ flux build        # run the pipeline
 flux test         # run the test step
 ```
 
-| Example | Stack | `.flux` shows |
-| ------- | ----- | ------------- |
+| Example | Stack | Shows |
+| ------- | ----- | ----- |
 | [rust-app](rust-app)     | Rust   | scoped `inputs`, `needs` |
 | [node-app](node-app)     | Node   | dependency step + test |
 | [python-app](python-app) | Python | dependency step + test |
+| [workspace-demo](workspace-demo) | Rust ×2 | a `flux.workspace` with cross-project affected-detection |
 
 `flux validate` works without any toolchain installed; `flux build`/`flux test`
 run the real commands, so they need the relevant toolchain (cargo / node / python).
