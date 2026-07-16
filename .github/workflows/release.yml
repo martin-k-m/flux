@@ -1,8 +1,10 @@
 name: Release
 
-# Fires when a version tag is pushed. Builds cross-platform binaries and
-# attaches them to the GitHub Release for that tag. Release notes are generated
-# automatically from the commit history.
+# Fires when a version tag is pushed. Builds cross-platform binaries in a matrix,
+# then a single `release` job attaches them all to the GitHub Release for that
+# tag. Splitting build from publish avoids the race where several matrix jobs
+# each try to *create* the same release at once (which left earlier runs with
+# only one asset attached).
 on:
   push:
     tags: ["v*"]
@@ -59,17 +61,34 @@ jobs:
         run: |
           Compress-Archive -Path "target/${{ matrix.target }}/release/flux.exe" -DestinationPath "flux-${{ matrix.target }}.zip"
 
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: flux-${{ matrix.target }}.*
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-
-      - name: Upload build artifact (manual runs)
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: flux-${{ matrix.target }}
           path: flux-${{ matrix.target }}.*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Collect binaries
+        shell: bash
+        run: |
+          mkdir -p out
+          find dist -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} out/ \;
+          ls -l out
+
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
