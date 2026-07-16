@@ -1,0 +1,31 @@
+[package]
+name = "flux"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+description = "A local-first software automation engine: build, test, and package apps consistently."
+license = "Apache-2.0"
+readme = "README.md"
+
+[[bin]]
+name = "flux"
+path = "src/main.rs"
+
+[dependencies]
+# `default-features = false` drops clap's `color` feature, which is the only
+# thing that would pull in `windows-sys` (and thus a `dlltool` build step that
+# needs a full MinGW binutils). We keep everything needed for a good CLI.
+clap = { version = "4.5", default-features = false, features = [
+    "std",
+    "derive",
+    "help",
+    "usage",
+    "error-context",
+    "suggestions",
+] }
+sha2 = "0.10"
+anyhow = "1.0"
+
+[profile.release]
+strip = true
+lto = "thin"
