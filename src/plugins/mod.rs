@@ -113,6 +113,53 @@ pub fn install(root: &std::path::Path, name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Plugin Development Kit (4.19): scaffold a new plugin project.
+///
+/// Generates `plugins/<name>/` with a manifest, source, tests, and a README so
+/// the ecosystem has a stable starting point.
+pub fn create(root: &std::path::Path, name: &str) -> anyhow::Result<std::path::PathBuf> {
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        anyhow::bail!("invalid plugin name '{name}' (use letters, digits, '-' or '_')");
+    }
+    let dir = root.join("plugins").join(name);
+    if dir.exists() {
+        anyhow::bail!("plugins/{name} already exists");
+    }
+    std::fs::create_dir_all(dir.join("src"))?;
+    std::fs::create_dir_all(dir.join("tests"))?;
+
+    std::fs::write(
+        dir.join("manifest.toml"),
+        format!(
+            "name = \"{name}\"\nversion = \"0.1.0\"\nauthor = \"you\"\ncapabilities = []\n\n\
+             # Declare what this plugin can do, e.g.:\n\
+             # capabilities = [\"container-build\", \"image-push\"]\n"
+        ),
+    )?;
+    std::fs::write(
+        dir.join("src").join("plugin.rs"),
+        "// Implement the Flux plugin contract.\n\
+         //\n\
+         // trait FluxPlugin {\n\
+         //     fn execute(&self, ctx: &Context) -> Result<()>;\n\
+         //     fn validate(&self) -> Result<()>;\n\
+         // }\n",
+    )?;
+    std::fs::write(
+        dir.join("tests").join("plugin_test.rs"),
+        "// Add plugin tests here.\n",
+    )?;
+    std::fs::write(
+        dir.join("README.md"),
+        format!("# {name}\n\nA Flux plugin. Describe what it does and how to configure it.\n"),
+    )?;
+    Ok(dir)
+}
+
 /// List locally-installed plugin names.
 pub fn installed(root: &std::path::Path) -> Vec<String> {
     let mut out = Vec::new();

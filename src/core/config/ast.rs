@@ -21,8 +21,23 @@ pub struct FluxConfig {
     pub uses: Vec<String>,
     /// Runner pools declared for scheduling (`runners { pool "gpu" { ... } }`).
     pub runner_pools: Vec<RunnerPool>,
+    /// Organization policies (`policy production { require tests ... }`).
+    pub policies: Vec<Policy>,
     /// The pipeline steps (order as written; execution order comes from the graph).
     pub steps: Vec<Step>,
+}
+
+/// An organization-wide policy that a pipeline must satisfy (Phase 4, 4.15).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Policy {
+    /// Policy name, e.g. `production`.
+    pub name: String,
+    /// Require a test step in the pipeline.
+    pub require_tests: bool,
+    /// Require a security step (e.g. `tool killer`).
+    pub require_security: bool,
+    /// Require at least this many approvals.
+    pub require_approvals: u32,
 }
 
 /// A pool of runners with shared requirements (Phase 3, 3.1).

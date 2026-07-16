@@ -260,3 +260,95 @@ fn module_use_splices_reusable_steps() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn workspace_builds_only_affected_members() {
+    let dir = temp_project("ws");
+    for member in ["shared", "auth"] {
+        let mroot = dir.join(member);
+        std::fs::create_dir_all(&mroot).unwrap();
+        std::fs::write(
+            mroot.join("Cargo.toml"),
+            format!("[package]\nname=\"{member}\"\nversion=\"0.1.0\"\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            mroot.join(".flux"),
+            format!("project \"{member}\"\nlanguage rust\npipeline {{ step build {{ command \"echo build-{member}\" }} }}\n"),
+        )
+        .unwrap();
+        std::fs::write(mroot.join("src.txt"), "v1").unwrap();
+    }
+    write(
+        &dir,
+        "flux.workspace",
+        "workspace \"w\"\nmember shared { path \"shared\" }\nmember auth { path \"auth\" needs [ shared ] }\n",
+    );
+
+    // First build: both affected.
+    let (out1, ok1) = run(&dir, &["workspace", "build"]);
+    assert!(ok1, "{out1}");
+    assert!(
+        out1.contains("build-shared") && out1.contains("build-auth"),
+        "{out1}"
+    );
+
+    // Change only `auth`; rebuild should skip `shared`.
+    std::fs::write(dir.join("auth").join("src.txt"), "v2").unwrap();
+    let (out2, ok2) = run(&dir, &["workspace", "build"]);
+    assert!(ok2, "{out2}");
+    assert!(
+        out2.contains("shared  skipped (unchanged)"),
+        "shared should be skipped: {out2}"
+    );
+    assert!(out2.contains("build-auth"), "auth should rebuild: {out2}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn policy_blocks_ci_when_violated() {
+    let dir = temp_project("policy");
+    write(
+        &dir,
+        "Cargo.toml",
+        "[package]\nname = \"p\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir,
+        ".flux",
+        "project \"p\"\nlanguage rust\npolicy prod { require tests require security }\n\
+         pipeline { step build { command \"echo building\" } }\n",
+    );
+
+    let (out, ok) = run(&dir, &["ci"]);
+    assert!(!ok, "ci must be blocked by policy: {out}");
+    assert!(out.contains("Policy violations"), "{out}");
+    assert!(
+        !out.contains("building"),
+        "the pipeline must not run: {out}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn init_template_writes_tailored_pipeline() {
+    let dir = temp_project("tpl");
+    write(
+        &dir,
+        "Cargo.toml",
+        "[package]\nname = \"api\"\nversion = \"0.1.0\"\n",
+    );
+
+    let (out, ok) = run(&dir, &["init", "rust-api"]);
+    assert!(ok, "{out}");
+    let cfg = std::fs::read_to_string(dir.join(".flux")).unwrap();
+    assert!(
+        cfg.contains("environment { image \"rust:latest\" }"),
+        "{cfg}"
+    );
+    assert!(cfg.contains("target kubernetes"), "{cfg}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

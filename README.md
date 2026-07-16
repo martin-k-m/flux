@@ -14,6 +14,10 @@ the orchestration layer that connects a developer's tools — not replace them.
 - **Phase 3** — an *intelligent* cache that rebuilds only what changed,
   reusable pipeline **modules**, build **analytics**, reproducibility
   **locks**, runner **pools**, and per-environment secrets.
+- **Phase 4** — a platform layer: multi-project **workspaces** with
+  cross-project affected-detection, first-party dev tools (`fmt`, `lint`,
+  `doctor`, `changelog`, `version`, `deps`), pipeline **templates**, a **policy
+  engine**, automatic **Blink/Killer** integration, and a plugin **PDK**.
 
 ---
 
@@ -78,6 +82,13 @@ cargo build --release      # binary at target/release/flux
 | `flux analytics`                     | Build-performance stats from run history                 |
 | `flux lock` / `flux reproduce`       | Capture / verify a reproducible environment              |
 | `flux secret set <n> <v> --env prod` | Per-environment encrypted secrets                        |
+| `flux init <template>`               | Scaffold from a template (react, rust-api, library, cli) |
+| `flux workspace status` / `build`    | Multi-project workspace, builds only affected members    |
+| `flux policy`                        | Check the pipeline against declared policies             |
+| `flux fmt` / `lint` / `doctor`       | Language-aware format, lint, and environment diagnosis   |
+| `flux changelog` / `version <part>`  | Generate a changelog / bump the semver                   |
+| `flux deps` / `status` / `graph`     | Inspect dependencies, project state, and the pipeline    |
+| `flux plugin create <name>`          | Scaffold a plugin with the PDK                            |
 
 ## The graph engine (2.1)
 
@@ -143,6 +154,26 @@ Pipeline:
 - **Secret environments (3.7)** — the same secret name holds different values in
   `--env development` vs. `--env production`, each with its own key.
 
+## Platform features (Phase 4)
+
+- **Workspaces (4.1/4.2)** — a `flux.workspace` file declares member projects and
+  their dependencies. `flux workspace build` builds them in dependency order and,
+  when `shared` changes, rebuilds only `shared` and what depends on it — the
+  intelligent cache applied across repositories.
+- **First-party tools (4.5)** — `flux fmt`, `flux lint` (language-aware), `flux
+  doctor` (environment/toolchain/config health), `flux changelog` (from git
+  commits), `flux version <major|minor|patch>` (bumps the manifest), `flux deps`.
+- **Templates (4.6)** — `flux init rust-api|react|library|cli|node-service` writes
+  a curated pipeline with best-practice defaults.
+- **Policy engine (4.15)** — `policy production { require tests, require security,
+  require approvals 2 }`. `flux ci` refuses to run a pipeline that violates policy
+  (approvals come from `FLUX_APPROVALS`).
+- **Blink/Killer integration (4.18)** — Flux auto-detects a Blink profile and a
+  Killer config; if Killer is present it adds a security scan automatically, no
+  wiring required.
+- **Plugin PDK (4.19)** — `flux plugin create <name>` scaffolds a plugin with a
+  manifest, source, tests, and README.
+
 ## Detection
 
 | Language | Detected by                           | Default pipeline                                       |
@@ -173,6 +204,11 @@ single-machine sandbox, and stubbing them would be dishonest:
 - **Enterprise teams/RBAC (3.10)** and **hosted plugin marketplace fetch (3.4)**
   — these need real identity and a registry service. `flux plugin install`
   records intent locally; the marketplace catalog is built-in, not fetched.
+- **REST API & SDKs (4.16)**, **visual pipeline editor (4.13)**, and **live
+  notification delivery (4.12)** — a hosted HTTP service, a web front end, and
+  outbound network calls. The CLI, `.flux` config, and `.flux-cache/` state are
+  the data model these would sit on top of. The policy engine, workspaces, and
+  first-party tools are all real and local.
 
 ## A note on paths
 

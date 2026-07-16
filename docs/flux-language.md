@@ -181,6 +181,46 @@ View pools and registered runners with `flux runners list`. A step can prefer a
 pool with `pool "gpu-builders"`. (Scheduling *across machines* is part of the
 deferred distributed runner network; locally the graph engine uses this machine.)
 
+## Policies (4.15)
+
+Declare organization rules a pipeline must satisfy before it ships:
+
+```flux
+policy production {
+    require tests
+    require security
+    require approvals 2
+}
+```
+
+`flux policy` checks the current pipeline; `flux ci` refuses to run when a policy
+is violated. `require tests` needs a step whose name contains `test`; `require
+security` needs a `tool killer` (or `security`) step; `require approvals N` is
+satisfied by the `FLUX_APPROVALS` environment variable (Flux has no identity
+system of its own).
+
+## Workspaces (4.1/4.2)
+
+A `flux.workspace` file (separate from `.flux`) manages multiple projects:
+
+```text
+workspace "backend"
+
+member shared  { path "shared" }
+member auth    { path "services/auth"    needs [ shared ] }
+member gateway { path "services/gateway" needs [ auth, shared ] }
+```
+
+`flux workspace build` builds members in dependency order and rebuilds only those
+affected by changes (a member whose files changed, plus everything downstream) —
+the intelligent cache extended across repositories. `flux workspace status` shows
+which members are affected.
+
+## Templates (4.6)
+
+`flux init <template>` writes a curated `.flux` instead of a bare default:
+`rust-api`, `react`, `node-service`, `library`, `cli`.
+
 ## Grammar
 
 ```text

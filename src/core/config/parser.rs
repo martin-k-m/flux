@@ -30,7 +30,9 @@
 
 use std::fmt;
 
-use super::ast::{CondOp, Condition, Deployment, Environment, FluxConfig, RunnerPool, Step};
+use super::ast::{
+    CondOp, Condition, Deployment, Environment, FluxConfig, Policy, RunnerPool, Step,
+};
 
 /// A parse failure with 1-based line information.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -370,6 +372,10 @@ pub fn parse(src: &str) -> Result<FluxConfig, ParseError> {
                 p.next();
                 cfg.runner_pools = parse_runners(&mut p)?;
             }
+            "policy" => {
+                p.next();
+                cfg.policies.push(parse_policy(&mut p)?);
+            }
             "pipeline" => {
                 p.next();
                 parse_pipeline(&mut p, &mut cfg)?;
@@ -378,7 +384,7 @@ pub fn parse(src: &str) -> Result<FluxConfig, ParseError> {
                 return Err(ParseError::new(
                     tok.line,
                     format!(
-                        "unknown top-level keyword '{other}' (expected project, language, environment, secret, deployment, import, runners, or pipeline)"
+                        "unknown top-level keyword '{other}' (expected project, language, environment, secret, deployment, import, runners, policy, or pipeline)"
                     ),
                 ))
             }
@@ -682,6 +688,52 @@ fn parse_requirements(p: &mut Parser, pool: &mut RunnerPool) -> Result<(), Parse
 fn parse_bool(p: &mut Parser) -> Result<bool, ParseError> {
     let v = p.expect_str_or_ident()?;
     Ok(matches!(v.as_str(), "true" | "yes" | "on"))
+}
+
+/// Parse `policy <name> { require tests, require security, require approvals N }`.
+fn parse_policy(p: &mut Parser) -> Result<Policy, ParseError> {
+    let name = p.expect_str_or_ident()?;
+    let mut policy = Policy {
+        name,
+        ..Policy::default()
+    };
+    p.expect_lbrace()?;
+    loop {
+        let tok = match p.peek().cloned() {
+            Some(t) => t,
+            None => return Err(ParseError::new(p.last_line(), "unclosed 'policy' block")),
+        };
+        if tok.kind == TokKind::RBrace {
+            p.next();
+            break;
+        }
+        if tok.kind == TokKind::Comma {
+            p.next();
+            continue;
+        }
+        let (kw, line) = p.expect_ident()?;
+        if kw != "require" {
+            return Err(ParseError::new(
+                line,
+                format!("expected 'require' in policy, found '{kw}'"),
+            ));
+        }
+        let (what, wline) = p.expect_ident()?;
+        match what.as_str() {
+            "tests" => policy.require_tests = true,
+            "security" => policy.require_security = true,
+            "approvals" => policy.require_approvals = p.expect_number()?.0,
+            other => {
+                return Err(ParseError::new(
+                    wline,
+                    format!(
+                    "unknown policy requirement '{other}' (expected tests, security, or approvals)"
+                ),
+                ))
+            }
+        }
+    }
+    Ok(policy)
 }
 
 /// Parse a condition: `IDENT ("==" | "!=") STRING`.

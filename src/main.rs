@@ -11,10 +11,14 @@ mod cache;
 mod cli;
 mod core;
 mod deploy;
+mod integrations;
 mod plugins;
+mod policy;
 mod repro;
 mod runners;
 mod secrets;
+mod tools;
+mod workspace;
 
 /// Human-facing version label (`flux --version` still reports the full semver).
 pub const VERSION_LABEL: &str = "v0.1";

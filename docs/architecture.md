@@ -22,7 +22,11 @@ flux/
 ├── analytics/    run history + build-performance aggregation
 ├── repro/        reproducibility lock (.flux.lock)
 ├── assist/       heuristic failure diagnosis
-└── plugins/      plugin registry + install
+├── workspace/    multi-project workspaces + affected-detection
+├── policy/       policy engine (require tests/security/approvals)
+├── integrations/ Blink/Killer auto-detection
+├── tools/        first-party dev tools (fmt/lint/doctor/changelog/version/deps)
+└── plugins/      plugin registry + install + PDK scaffolding
 ```
 
 ## Execution flow
@@ -92,6 +96,21 @@ Worker count defaults to the core count (capped at 16).
 - **Analytics (`analytics`)** — each run appends a tab-separated record; `analyze`
   aggregates averages, cache-hit rate, and the most expensive step.
 
+## Platform layer (Phase 4)
+
+- **Workspaces (`workspace`)** — a hand-written parser reads `flux.workspace`;
+  ordering and cycle-detection reuse the pipeline `Graph`. Affected-detection
+  hashes each member's path (via the scoped cache) and propagates downstream, so
+  `workspace build` rebuilds only what changed.
+- **Policy (`policy`)** — `evaluate` checks a parsed config's `policy` blocks
+  against its steps and an approvals count; `flux ci` blocks on violations.
+- **Integrations (`integrations`)** — detects Blink/Killer config files and can
+  inject a `tool killer` security step into the pipeline automatically.
+- **Tools (`tools`)** — language-aware `fmt`/`lint` wrappers, plus pure-logic
+  `version` (semver bump), `changelog` (git-commit grouping), `deps`, and
+  `doctor` (environment checks). The logic pieces are unit-tested directly.
+- **PDK (`plugins::create`)** — scaffolds a plugin project.
+
 ## Deliberate non-goals for these phases
 
 - **Distributed execution (2.3 / 3.1 networking)** — real gRPC controller/agents,
@@ -102,6 +121,9 @@ Worker count defaults to the core count (capped at 16).
   service. Foundation: the CLI and the `.flux-cache/` state it would read.
 - **Enterprise teams/RBAC (3.10) / hosted marketplace fetch (3.4)** — need real
   identity and a registry service; `flux plugin install` records intent locally.
+- **REST API & SDKs (4.16), visual pipeline editor (4.13), live notifications
+  (4.12)** — a hosted HTTP server, a web front end, and outbound network calls.
+  The CLI and `.flux-cache/` state are the data model these would build on.
 
 ## Toolchain note
 

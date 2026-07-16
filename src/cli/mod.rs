@@ -19,9 +19,13 @@ use crate::core::logging as log;
 use crate::core::pipeline::Pipeline;
 use crate::core::runner::fmt_duration;
 use crate::deploy;
+use crate::integrations;
+use crate::policy;
 use crate::repro::{self, Lock};
 use crate::runners::containers;
 use crate::secrets::SecretStore;
+use crate::tools;
+use crate::workspace::Workspace;
 use crate::VERSION_LABEL;
 
 /// Flux — a local-first developer automation platform.
@@ -36,6 +40,8 @@ struct Cli {
 enum Command {
     /// Detect the project and write a starter `.flux` file.
     Init {
+        /// Optional template: react, rust-api, library, cli, node-service.
+        template: Option<String>,
         /// Overwrite an existing `.flux` file.
         #[arg(long)]
         force: bool,
@@ -92,11 +98,43 @@ enum Command {
         #[command(subcommand)]
         action: SecretAction,
     },
-    /// Inspect and install plugins.
+    /// Inspect, install, or scaffold plugins.
     Plugin {
         #[command(subcommand)]
         action: PluginAction,
     },
+    // ---- Phase 4: platform ----
+    /// Manage a multi-project workspace.
+    Workspace {
+        #[command(subcommand)]
+        action: WorkspaceAction,
+    },
+    /// Check the pipeline against declared policies.
+    Policy,
+    /// A one-screen overview of the project's Flux state.
+    Status,
+    /// Print the pipeline dependency graph.
+    Graph,
+    /// Format the project with its language formatter.
+    Fmt,
+    /// Lint the project with its language linter.
+    Lint,
+    /// Generate a changelog from git commits.
+    Changelog,
+    /// Bump the project version (major | minor | patch).
+    Version { part: String },
+    /// Inspect project dependencies.
+    Deps,
+    /// Diagnose the environment, toolchains, and Flux setup.
+    Doctor,
+}
+
+#[derive(Subcommand, Debug)]
+enum WorkspaceAction {
+    /// Show workspace members and which are affected by changes.
+    Status,
+    /// Build affected members in dependency order.
+    Build,
 }
 
 #[derive(Subcommand, Debug)]
@@ -166,6 +204,8 @@ enum PluginAction {
     List,
     /// Install a plugin (registers it locally).
     Install { name: String },
+    /// Scaffold a new plugin with the PDK.
+    Create { name: String },
 }
 
 /// Entry point invoked by `main`. Returns the process exit code.
@@ -182,7 +222,7 @@ pub fn run() -> i32 {
     };
 
     let result = match cli.command {
-        Command::Init { force } => cmd_init(&cwd, force),
+        Command::Init { template, force } => cmd_init(&cwd, template, force),
         Command::Build => cmd_build(&cwd),
         Command::Test => cmd_test(&cwd),
         Command::Run { step } => cmd_run(&cwd, &step),
@@ -199,6 +239,16 @@ pub fn run() -> i32 {
         Command::Release { action } => cmd_release(&cwd, action),
         Command::Secret { action } => cmd_secret(&cwd, action),
         Command::Plugin { action } => cmd_plugin(&cwd, action),
+        Command::Workspace { action } => cmd_workspace(&cwd, action),
+        Command::Policy => cmd_policy(&cwd),
+        Command::Status => cmd_status(&cwd),
+        Command::Graph => cmd_graph(&cwd),
+        Command::Fmt => cmd_fmt(&cwd),
+        Command::Lint => cmd_lint(&cwd),
+        Command::Changelog => cmd_changelog(&cwd),
+        Command::Version { part } => cmd_version(&cwd, &part),
+        Command::Deps => cmd_deps(&cwd),
+        Command::Doctor => cmd_doctor(&cwd),
     };
 
     match result {
@@ -351,11 +401,23 @@ fn graph_exit(outcome: &GraphOutcome) -> i32 {
 // Build / test / run / ci
 // ---------------------------------------------------------------------------
 
+/// Detect sibling tools (Blink/Killer) and adjust the pipeline accordingly.
+fn apply_integrations(root: &Path, steps: &mut Vec<config::Step>) {
+    let siblings = integrations::detect(root);
+    if siblings.has_blink() {
+        log::ok_line("Blink project profile loaded — optimized pipeline selected");
+    }
+    if integrations::inject_killer(steps, &siblings) {
+        log::ok_line("Killer configured — added an automatic security scan");
+    }
+}
+
 fn cmd_build(root: &Path) -> anyhow::Result<i32> {
-    let (config, _, pipeline) = load_context(root)?;
+    let (config, _, mut pipeline) = load_context(root)?;
     ensure_runnable(&pipeline)?;
 
     print_header(&pipeline);
+    apply_integrations(root, &mut pipeline.steps);
     log::heading("Pipeline:");
 
     let outcome = execute_steps(root, &config, &pipeline.steps, true)?;
@@ -423,13 +485,27 @@ fn cmd_run(root: &Path, step_name: &str) -> anyhow::Result<i32> {
 }
 
 fn cmd_ci(root: &Path) -> anyhow::Result<i32> {
-    let (config, detection, pipeline) = load_context(root)?;
+    let (config, detection, mut pipeline) = load_context(root)?;
     ensure_runnable(&pipeline)?;
 
     log::banner(&format!("{VERSION_LABEL}  ·  CI mode"));
     log::info_line(&log::dim("Clean environment · cache disabled"));
     log::field("Project", &pipeline.project);
     log::field("Language", &language_label(&pipeline.language));
+
+    apply_integrations(root, &mut pipeline.steps);
+
+    // Enforce declared policies before running anything (4.15).
+    let violations = policy::evaluate(&config, policy::approvals_from_env());
+    if !violations.is_empty() {
+        log::heading("Policy violations:");
+        for v in &violations {
+            log::fail_line(&format!("[{}] {}", v.policy, v.message));
+        }
+        anyhow::bail!(
+            "pipeline blocked by policy — fix the violations above or set FLUX_APPROVALS"
+        );
+    }
 
     // CI always starts from a clean build cache and never short-circuits.
     Cache::new(root).clear_builds()?;
@@ -899,6 +975,339 @@ fn cmd_plugin(root: &Path, action: PluginAction) -> anyhow::Result<i32> {
             ));
             Ok(0)
         }
+        PluginAction::Create { name } => {
+            let dir = crate::plugins::create(root, &name)?;
+            log::banner(VERSION_LABEL);
+            log::ok_line(&format!("Scaffolded plugin {} (PDK)", log::bold(&name)));
+            log::info_line(&format!("  {}", log::dim(&dir.display().to_string())));
+            for f in [
+                "manifest.toml",
+                "src/plugin.rs",
+                "tests/plugin_test.rs",
+                "README.md",
+            ] {
+                log::info_line(&format!("    {} {f}", log::green(log::CHECK)));
+            }
+            Ok(0)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: workspace / policy / status / graph / dev tools
+// ---------------------------------------------------------------------------
+
+fn cmd_workspace(root: &Path, action: WorkspaceAction) -> anyhow::Result<i32> {
+    let ws = Workspace::load(root)?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "no {} found in this directory",
+            crate::workspace::WORKSPACE_FILE
+        )
+    })?;
+    let ordered = ws.ordered()?;
+    let affected = ws.affected(root)?;
+
+    match action {
+        WorkspaceAction::Status => {
+            log::banner(VERSION_LABEL);
+            log::heading(&format!("Workspace: {}", ws.name));
+            for m in &ordered {
+                let state = if affected.contains(&m.name) {
+                    log::yellow("affected")
+                } else {
+                    log::dim("unchanged")
+                };
+                let deps = if m.needs.is_empty() {
+                    String::new()
+                } else {
+                    log::dim(&format!("  needs: {}", m.needs.join(", ")))
+                };
+                println!(
+                    "  {} {}  {state}{deps}",
+                    log::cyan(log::DOT),
+                    log::bold(&m.name)
+                );
+            }
+            Ok(0)
+        }
+        WorkspaceAction::Build => {
+            log::banner(&format!("{VERSION_LABEL}  ·  workspace build"));
+            log::field("Workspace", &ws.name);
+            log::info_line(&log::dim(&format!(
+                "  {} of {} members affected",
+                affected.len(),
+                ordered.len()
+            )));
+
+            let mut all_ok = true;
+            for m in &ordered {
+                if !affected.contains(&m.name) {
+                    println!(
+                        "  {} {}  {}",
+                        log::green(log::CHECK),
+                        m.name,
+                        log::dim("skipped (unchanged)")
+                    );
+                    continue;
+                }
+                let member_root = ws.member_path(root, m);
+                log::heading(&format!("→ {} ({})", m.name, m.path));
+                let (config, _, pipeline) = match load_context(&member_root) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        log::fail_line(&format!("{}: {e}", m.name));
+                        all_ok = false;
+                        break;
+                    }
+                };
+                if pipeline.steps.is_empty() {
+                    log::info_line(&log::dim("  no pipeline — skipped"));
+                    continue;
+                }
+                let outcome = execute_steps(&member_root, &config, &pipeline.steps, true)?;
+                if !outcome.success {
+                    log::fail_line(&format!("member '{}' failed", m.name));
+                    all_ok = false;
+                    break;
+                }
+            }
+
+            if all_ok {
+                ws.record_hashes(root)?;
+                println!(
+                    "\n{}",
+                    log::green(&format!("{} Workspace build succeeded", log::CHECK))
+                );
+                Ok(0)
+            } else {
+                println!("\n{}", log::red("Workspace build failed"));
+                Ok(1)
+            }
+        }
+    }
+}
+
+fn cmd_policy(root: &Path) -> anyhow::Result<i32> {
+    let config = load_config(root)?;
+    log::banner(VERSION_LABEL);
+    if config.policies.is_empty() {
+        log::info_line(&format!("  {} no policies declared", log::dim(log::DOT)));
+        return Ok(0);
+    }
+    let violations = policy::evaluate(&config, policy::approvals_from_env());
+    log::heading("Policy check:");
+    if violations.is_empty() {
+        log::ok_line("all policies satisfied");
+        Ok(0)
+    } else {
+        for v in &violations {
+            log::fail_line(&format!("[{}] {}", v.policy, v.message));
+        }
+        Ok(1)
+    }
+}
+
+fn cmd_status(root: &Path) -> anyhow::Result<i32> {
+    let detection = detect::detect(root);
+    let config = load_config(root).unwrap_or_default();
+    log::banner(VERSION_LABEL);
+    log::heading("Status:");
+    log::field(
+        "Project",
+        &config
+            .project
+            .clone()
+            .or_else(|| detection.name.clone())
+            .unwrap_or_else(|| "(unknown)".into()),
+    );
+    log::field("Language", &detection.language_label());
+    log::field("Steps", &config.steps.len().to_string());
+    log::field("Policies", &config.policies.len().to_string());
+    if let Ok(Some(ws)) = Workspace::load(root) {
+        log::field(
+            "Workspace",
+            &format!("{} ({} members)", ws.name, ws.members.len()),
+        );
+    }
+    let siblings = integrations::detect(root);
+    log::field(
+        "Siblings",
+        &format!(
+            "Blink {}, Killer {}",
+            yes_no(siblings.has_blink()),
+            yes_no(siblings.has_killer())
+        ),
+    );
+    let a = analytics::analyze(root).unwrap_or_default();
+    if a.runs > 0 {
+        log::field("Runs recorded", &a.runs.to_string());
+    }
+    Ok(0)
+}
+
+fn cmd_graph(root: &Path) -> anyhow::Result<i32> {
+    let (_, _, pipeline) = load_context(root)?;
+    ensure_runnable(&pipeline)?;
+    log::banner(VERSION_LABEL);
+    log::heading("Pipeline graph:");
+    for step in &pipeline.steps {
+        if step.needs.is_empty() {
+            println!("  {} {}", log::cyan(log::DOT), log::bold(&step.name));
+        } else {
+            println!(
+                "  {} {}  {}",
+                log::cyan(log::DOT),
+                log::bold(&step.name),
+                log::dim(&format!("needs {}", step.needs.join(", ")))
+            );
+        }
+    }
+    if let Ok(graph) = crate::core::graph::Graph::build(&pipeline.steps) {
+        log::info_line(&format!(
+            "\n  {}",
+            log::dim(&format!(
+                "execution order: {}",
+                graph.topo_order().join(" \u{2192} ")
+            ))
+        ));
+    }
+    Ok(0)
+}
+
+fn cmd_fmt(root: &Path) -> anyhow::Result<i32> {
+    let language = require_language(root)?;
+    log::banner(VERSION_LABEL);
+    match tools::fmt(root, &language) {
+        tools::ToolOutcome::Ran { success } if success => {
+            log::ok_line("Formatting complete");
+            Ok(0)
+        }
+        tools::ToolOutcome::Ran { .. } => {
+            log::fail_line("Formatter reported problems");
+            Ok(1)
+        }
+        tools::ToolOutcome::NoCommand => {
+            log::fail_line(&format!(
+                "no formatter available for {language} (would run: {})",
+                tools::fmt_command(&language).unwrap_or("n/a")
+            ));
+            Ok(1)
+        }
+    }
+}
+
+fn cmd_lint(root: &Path) -> anyhow::Result<i32> {
+    let language = require_language(root)?;
+    log::banner(VERSION_LABEL);
+    match tools::lint(root, &language) {
+        tools::ToolOutcome::Ran { success } if success => {
+            log::ok_line("Lint passed");
+            Ok(0)
+        }
+        tools::ToolOutcome::Ran { .. } => {
+            log::fail_line("Lint found issues");
+            Ok(1)
+        }
+        tools::ToolOutcome::NoCommand => {
+            log::fail_line(&format!(
+                "no linter available for {language} (would run: {})",
+                tools::lint_command(&language).unwrap_or("n/a")
+            ));
+            Ok(1)
+        }
+    }
+}
+
+fn cmd_changelog(root: &Path) -> anyhow::Result<i32> {
+    let md = tools::changelog::generate(root)?;
+    print!("{md}");
+    Ok(0)
+}
+
+fn cmd_version(root: &Path, part: &str) -> anyhow::Result<i32> {
+    let part = tools::version::Part::parse(part).ok_or_else(|| {
+        anyhow::anyhow!("unknown version part '{part}' (use major, minor, or patch)")
+    })?;
+    let language = require_language(root)?;
+    let (old, new) = tools::version::bump_project(root, &language, part)?;
+    log::banner(VERSION_LABEL);
+    log::ok_line(&format!(
+        "Version bumped {} → {}",
+        log::dim(&old),
+        log::bold(&new)
+    ));
+    Ok(0)
+}
+
+fn cmd_deps(root: &Path) -> anyhow::Result<i32> {
+    let language = require_language(root)?;
+    let report = tools::deps::inspect(root, &language)?;
+    log::banner(VERSION_LABEL);
+    log::heading("Dependencies:");
+    log::field("Total", &report.total.to_string());
+    log::field(
+        "Duplicates",
+        &if report.duplicates.is_empty() {
+            "0".to_string()
+        } else {
+            format!(
+                "{} ({})",
+                report.duplicates.len(),
+                report.duplicates.join(", ")
+            )
+        },
+    );
+    log::info_line(&format!(
+        "  {} {}",
+        log::dim(log::DOT),
+        log::dim(report.outdated_note())
+    ));
+    Ok(0)
+}
+
+fn cmd_doctor(root: &Path) -> anyhow::Result<i32> {
+    let detection = detect::detect(root);
+    let checks = tools::doctor::run(root, &detection);
+    log::banner(&format!("{VERSION_LABEL}  ·  doctor"));
+    log::heading("Checks:");
+    let mut failures = 0;
+    for c in &checks {
+        if c.ok {
+            log::ok_line(&format!("{}  {}", c.name, log::dim(&c.detail)));
+        } else {
+            failures += 1;
+            log::fail_line(&format!("{}  {}", c.name, log::dim(&c.detail)));
+        }
+    }
+    if failures == 0 {
+        println!(
+            "\n{}",
+            log::green(&format!("{} Everything looks healthy", log::CHECK))
+        );
+        Ok(0)
+    } else {
+        println!(
+            "\n{}",
+            log::yellow(&format!("{failures} check(s) need attention"))
+        );
+        Ok(1)
+    }
+}
+
+/// Resolve the project language or bail with a helpful message.
+fn require_language(root: &Path) -> anyhow::Result<String> {
+    let config = load_config(root).unwrap_or_default();
+    config
+        .language
+        .or_else(|| detect::detect(root).language)
+        .ok_or_else(|| anyhow::anyhow!("could not determine the project language"))
+}
+
+fn yes_no(b: bool) -> String {
+    if b {
+        log::green("yes")
+    } else {
+        log::dim("no").to_string()
     }
 }
 
@@ -979,30 +1388,48 @@ fn cmd_info(root: &Path) -> anyhow::Result<i32> {
     Ok(0)
 }
 
-fn cmd_init(root: &Path, force: bool) -> anyhow::Result<i32> {
+fn cmd_init(root: &Path, template: Option<String>, force: bool) -> anyhow::Result<i32> {
     let path = root.join(config::CONFIG_FILE);
     if path.exists() && !force {
         anyhow::bail!(".flux already exists (use --force to overwrite)");
     }
 
-    let detection = detect::detect(root);
-    let language = detection.language.clone().ok_or_else(|| {
-        anyhow::anyhow!(
-            "could not detect a supported project (looked for Cargo.toml, package.json, requirements.txt, ...)"
-        )
-    })?;
-
-    let steps = crate::runners::default_steps(&language).unwrap_or_default();
-    let project = detection
+    let project = detect::detect(root)
         .name
-        .clone()
         .or_else(|| dir_name(root))
         .unwrap_or_else(|| "my-app".into());
 
-    std::fs::write(&path, generate_config(&project, &language, &steps))?;
+    // A named template (4.6) uses a curated pipeline; otherwise detect.
+    let (language, contents) = match &template {
+        Some(name) => match template_config(name, &project) {
+            Some(cfg) => (template_language(name).to_string(), cfg),
+            None => anyhow::bail!(
+                "unknown template '{name}' (available: react, node-service, rust-api, library, cli)"
+            ),
+        },
+        None => {
+            let detection = detect::detect(root);
+            let language = detection.language.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "could not detect a supported project (looked for Cargo.toml, package.json, requirements.txt, ...).\n       \
+                     Try a template, e.g. `flux init rust-api`."
+                )
+            })?;
+            let steps = crate::runners::default_steps(&language).unwrap_or_default();
+            (
+                language.clone(),
+                generate_config(&project, &language, &steps),
+            )
+        }
+    };
+
+    std::fs::write(&path, contents)?;
 
     log::banner(VERSION_LABEL);
     println!("{}", log::bold("Flux configured:"));
+    if let Some(name) = &template {
+        log::ok_line(&format!("Template '{}' applied", log::bold(name)));
+    }
     log::ok_line(&format!(
         "{} build pipeline created",
         language_label(&language)
@@ -1014,6 +1441,57 @@ fn cmd_init(root: &Path, force: bool) -> anyhow::Result<i32> {
         log::cyan(&path.display().to_string())
     ));
     Ok(0)
+}
+
+/// The language a template targets.
+fn template_language(name: &str) -> &'static str {
+    match name {
+        "react" | "node-service" => "node",
+        "rust-api" | "library" | "cli" => "rust",
+        _ => "rust",
+    }
+}
+
+/// Curated `.flux` contents for a named template (4.6). Returns `None` for
+/// unknown templates.
+fn template_config(name: &str, project: &str) -> Option<String> {
+    let body = match name {
+        "react" => {
+            "language node\n\npipeline {\n\
+             \x20   step dependencies { command \"npm install\" }\n\
+             \x20   step lint  { needs dependencies command \"npm run lint\" }\n\
+             \x20   step build { needs dependencies command \"npm run build\" inputs [ \"src/**\" ] }\n\
+             \x20   step test  { needs build command \"npm test\" }\n}\n\n\
+             deployment { target static }\n"
+        }
+        "node-service" => {
+            "language node\n\nenvironment { image \"node:latest\" }\n\npipeline {\n\
+             \x20   step dependencies { command \"npm install\" }\n\
+             \x20   step build { needs dependencies command \"npm run build\" }\n\
+             \x20   step test  { needs build command \"npm test\" }\n}\n\n\
+             deployment { target docker replicas 2 }\n"
+        }
+        "rust-api" => {
+            "language rust\n\nenvironment { image \"rust:latest\" }\n\npipeline {\n\
+             \x20   step dependencies { command \"cargo fetch\" }\n\
+             \x20   step build { needs dependencies command \"cargo build --release\" inputs [ \"src/**\" ] }\n\
+             \x20   step test  { needs build command \"cargo test\" }\n}\n\n\
+             deployment { target kubernetes replicas 3 }\n"
+        }
+        "library" => {
+            "language rust\n\npipeline {\n\
+             \x20   step build { command \"cargo build --release\" }\n\
+             \x20   step test  { needs build command \"cargo test\" }\n\
+             \x20   step docs  { needs build command \"cargo doc --no-deps\" }\n}\n"
+        }
+        "cli" => {
+            "language rust\n\npipeline {\n\
+             \x20   step build { command \"cargo build --release\" inputs [ \"src/**\" ] }\n\
+             \x20   step test  { needs build command \"cargo test\" }\n}\n"
+        }
+        _ => return None,
+    };
+    Some(format!("project \"{project}\"\n{body}"))
 }
 
 // ---------------------------------------------------------------------------
