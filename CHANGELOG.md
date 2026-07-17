@@ -11,6 +11,13 @@ All notable changes to Flux are documented here. The format is based on
 - **Install via Homebrew and Scoop.** `brew install martin-k-m/flux/flux` (tap:
   [martin-k-m/homebrew-flux](https://github.com/martin-k-m/homebrew-flux)) and
   `scoop bucket add flux https://github.com/martin-k-m/scoop-flux && scoop install flux`.
+- **crates.io readiness.** The release workflow now publishes the crate on each
+  tag when a `CRATES_IO_TOKEN` secret is set (no-op otherwise).
+
+### Changed
+
+- **crates.io package name is `flux-platform`** (the short `flux` is taken by an
+  unrelated crate). The installed **binary is unchanged — still `flux`**.
 
 ## [0.3.0] — 2026-07-16
 

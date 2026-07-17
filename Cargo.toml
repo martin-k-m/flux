@@ -1,5 +1,7 @@
+# Published to crates.io as `flux-platform` (the short name `flux` is taken by an
+# unrelated crate). The installed binary is still `flux` — see `[[bin]]` below.
 [package]
-name = "flux"
+name = "flux-platform"
 version = "0.3.0"
 edition = "2021"
 rust-version = "1.74"

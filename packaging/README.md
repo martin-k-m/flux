@@ -13,7 +13,17 @@ version tag), and the Homebrew tap and Scoop bucket are published.
 | **Homebrew** | ✅ published | `brew install martin-k-m/flux/flux` — tap: [martin-k-m/homebrew-flux](https://github.com/martin-k-m/homebrew-flux) |
 | **Scoop** | ✅ published | `scoop bucket add flux https://github.com/martin-k-m/scoop-flux && scoop install flux` |
 | **winget** | planned | submit a manifest to `microsoft/winget-pkgs` |
-| **crates.io** | blocked | the crate name `flux` is taken (an InfluxDB client); publishing would need a different name (e.g. `flux-cli`) plus a `CARGO_REGISTRY_TOKEN` |
+| **crates.io** | ready | the crate publishes as **`flux-platform`** (the short `flux` is taken by an unrelated InfluxDB client); the installed binary is still `flux`. `cargo install flux-platform` works once the first version is published — see below |
+
+## crates.io
+
+The crate is named `flux-platform` on crates.io (`[package] name`), while the
+binary stays `flux` (`[[bin]] name`). The release workflow's `publish-crate` job
+runs `cargo publish` automatically on each version tag **when the `CRATES_IO_TOKEN`
+repository secret is set** — it's a no-op otherwise, so nothing publishes by
+accident. To enable it: create a crates.io API token, add it as the
+`CRATES_IO_TOKEN` Actions secret, then push a version tag (or run the first
+`cargo publish` manually). After that, users install with `cargo install flux-platform`.
 
 ## Keeping the manifests in sync
 
