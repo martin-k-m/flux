@@ -29,7 +29,7 @@ mod tools;
 mod workspace;
 
 /// Human-facing version label (`flux --version` still reports the full semver).
-pub const VERSION_LABEL: &str = "v0.2";
+pub const VERSION_LABEL: &str = "v0.3";
 
 fn main() {
     // The CLI layer owns all user-facing error reporting and returns the

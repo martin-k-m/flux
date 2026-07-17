@@ -250,7 +250,7 @@ flux test        # run the test step
 
 ## Roadmap
 
-**Available now (v0.2)**
+**Available now (v0.3)**
 
 - ✅ `.flux` configuration language + `flux validate`
 - ✅ Dependency-graph pipeline engine (parallel, `needs`, retries, `only_if`)

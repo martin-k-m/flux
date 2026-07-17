@@ -6,6 +6,8 @@ All notable changes to Flux are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-16
+
 ### Removed
 
 - **Blink/Killer/Beacon ecosystem coupling.** Flux is now a standalone tool. The
@@ -111,5 +113,6 @@ Cross-machine distributed execution, a web dashboard, a REST API & SDKs, a visua
 pipeline editor, live notification delivery, enterprise teams/RBAC, a hosted
 plugin marketplace, and a prebuilt installer. See the README roadmap.
 
+[0.3.0]: https://github.com/martin-k-m/flux/releases/tag/v0.3.0
 [0.2.0]: https://github.com/martin-k-m/flux/releases/tag/v0.2.0
 [0.1.0]: https://github.com/martin-k-m/flux/releases/tag/v0.1.0
