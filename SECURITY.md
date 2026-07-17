@@ -43,5 +43,6 @@ build script — review before running.
   not an attacker who already has read access to `.flux-cache/`. See the module
   docs for the exact threat model. Add `.flux-cache/` to `.gitignore` (the
   default `.gitignore` already does).
-- Flux itself does not perform vulnerability scanning — that's **Killer's** domain
-  (via the `tool killer` integration).
+- Flux itself does not perform vulnerability scanning. You can hand a pipeline
+  step off to your own scanner with a `tool <name>` hook (see the `.flux`
+  language reference).

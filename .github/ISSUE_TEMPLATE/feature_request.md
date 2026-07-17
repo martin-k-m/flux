@@ -15,5 +15,5 @@ What you'd like to see. If it affects the `.flux` language or CLI, sketch the sy
 Other approaches you've considered.
 
 **Scope check**
-Flux is the orchestration layer between writing code and shipping it. Blink owns
-project creation; Killer owns security. Does this fit Flux's scope?
+Flux is the local-first orchestration layer between writing code and shipping
+it — build, test, package, deploy. Does this fit Flux's scope?

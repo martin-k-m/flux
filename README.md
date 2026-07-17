@@ -17,7 +17,7 @@ the orchestration layer that connects a developer's tools — not replace them.
 - **Phase 4** — a platform layer: multi-project **workspaces** with
   cross-project affected-detection, first-party dev tools (`fmt`, `lint`,
   `doctor`, `changelog`, `version`, `deps`), pipeline **templates**, a **policy
-  engine**, automatic **Blink/Killer** integration, and a plugin **PDK**.
+  engine**, and a plugin **PDK**.
 - **Phase 5** — an **AI-native** layer: **repository intelligence**
   (`flux project`), a **knowledge graph**, honest **AI agents**
   (`flux agent run …`), a natural-language front door (`flux ask`), local
@@ -145,7 +145,7 @@ Pipeline:
 - **Flux Assist (2.12 / 3.11)** — on failure, Flux matches the output against
   known signatures and suggests fixes. No AI, no network — just heuristics.
 
-## Ecosystem features (Phase 3)
+## Infrastructure features (Phase 3)
 
 - **Intelligent cache (3.2)** — declare `inputs [ "frontend/**" ]` on a step and
   it's only invalidated when a matching file changes. Combined with the graph,
@@ -177,9 +177,6 @@ Pipeline:
 - **Policy engine (4.15)** — `policy production { require tests, require security,
   require approvals 2 }`. `flux ci` refuses to run a pipeline that violates policy
   (approvals come from `FLUX_APPROVALS`).
-- **Blink/Killer integration (4.18)** — Flux auto-detects a Blink profile and a
-  Killer config; if Killer is present it adds a security scan automatically, no
-  wiring required.
 - **Plugin PDK (4.19)** — `flux plugin create <name>` scaffolds a plugin with a
   manifest, source, tests, and README.
 
@@ -261,7 +258,7 @@ flux test        # run the test step
 - ✅ Modules, artifacts & releases, encrypted secrets, reproducibility lock
 - ✅ Deployment dispatch, workspaces, policy engine
 - ✅ First-party tools (`fmt`/`lint`/`doctor`/`changelog`/`version`/`deps`)
-- ✅ Plugins + PDK, local runners, Blink/Killer integration
+- ✅ Plugins + PDK, local runners
 - ✅ AI-native layer: repository intelligence, knowledge graph, AI agents,
   `flux ask`, local GitHub integration, docs engine, HTML dashboard
 

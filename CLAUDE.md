@@ -8,10 +8,9 @@ Context for AI agents working in this repository.
 Rust CLI (`flux`) that takes a project from build → test → package → deploy from
 one `.flux` config file. Repo: <https://github.com/martin-k-m/flux>.
 
-It's the "build" tool in a three-part ecosystem — **Blink** creates projects,
-**Flux** builds/tests/ships them, **Killer** secures them. The marketing +
-docs website lives in a separate repo (`flux-web`, deployed at
-`flux.blinkdev.me`).
+Flux is a standalone tool — it coordinates a developer's existing tools rather
+than replacing them. The marketing + docs website lives in a separate repo
+(`flux-web`, deployed at `flux.blinkdev.me`).
 
 ## Status: Phases 1–5 are implemented and tested
 
@@ -26,8 +25,7 @@ docs website lives in a separate repo (`flux-web`, deployed at
   (`.flux.lock`), runner pools, per-environment secrets.
 - **Phase 4 — platform:** workspaces (multi-project, affected-detection),
   policy engine, first-party dev tools (`fmt`/`lint`/`doctor`/`changelog`/
-  `version`/`deps`), pipeline templates, Blink/Killer auto-integration,
-  plugin PDK, `status`/`graph`.
+  `version`/`deps`), pipeline templates, plugin PDK, `status`/`graph`.
 - **Phase 5 — AI-native platform:** repository intelligence (`flux project`,
   `intel/`), knowledge graph (`knowledge/` → `.flux-cache/knowledge/*.json`),
   honest heuristic AI agents (`agents/`: planner/reviewer/tester/documentation/
@@ -112,7 +110,6 @@ src/
   assist/     heuristic failure diagnosis
   workspace/  multi-project workspaces + affected-detection
   policy/     policy engine
-  integrations/ Blink/Killer auto-detection
   tools/      fmt/lint/doctor/changelog/version/deps
   plugins/    registry + install + PDK scaffolding
   platform/   flux.yaml config (hand-rolled YAML-subset parser)

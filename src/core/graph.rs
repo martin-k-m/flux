@@ -703,20 +703,14 @@ impl Graph {
 }
 
 fn hook_line(step_name: &str, tool: &str) -> String {
-    match tool {
-        "killer" => format!(
-            "  {} {}  {}\n",
-            log::yellow(log::DOT),
-            step_name,
-            log::dim("Killer security scan hook (install the killer plugin to run)")
-        ),
-        other => format!(
-            "  {} {}  {}\n",
-            log::yellow(log::DOT),
-            step_name,
-            log::dim(&format!("'{other}' tool hook (no plugin installed)"))
-        ),
-    }
+    format!(
+        "  {} {}  {}\n",
+        log::yellow(log::DOT),
+        step_name,
+        log::dim(&format!(
+            "'{tool}' tool hook (install the {tool} plugin to run)"
+        ))
+    )
 }
 
 #[cfg(test)]

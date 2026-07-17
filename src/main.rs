@@ -17,7 +17,6 @@ mod deploy;
 mod docs_engine;
 mod fsutil;
 mod github;
-mod integrations;
 mod intel;
 mod knowledge;
 mod platform;

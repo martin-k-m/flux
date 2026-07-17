@@ -34,7 +34,7 @@ pub struct Policy {
     pub name: String,
     /// Require a test step in the pipeline.
     pub require_tests: bool,
-    /// Require a security step (e.g. `tool killer`).
+    /// Require a security step (a `security`-named step or a `tool` hook).
     pub require_security: bool,
     /// Require at least this many approvals.
     pub require_approvals: u32,
@@ -78,7 +78,7 @@ pub struct Step {
     pub name: String,
     /// The shell command to execute, if this is a command step.
     pub command: Option<String>,
-    /// An external tool hook (e.g. `tool killer`) instead of a raw command.
+    /// An external tool hook (e.g. `tool scanner`) instead of a raw command.
     pub tool: Option<String>,
     /// Optional human description.
     pub description: Option<String>,
@@ -125,7 +125,7 @@ impl Step {
     }
 
     /// `true` when this step delegates to an external tool rather than a shell
-    /// command (e.g. the Killer security scanner).
+    /// command (an external scanner, linter, or other plugin hook).
     pub fn is_hook(&self) -> bool {
         self.tool.is_some()
     }

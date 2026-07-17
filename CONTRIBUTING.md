@@ -67,9 +67,8 @@ reference.
 ## Scope
 
 Flux aims to be the local-first orchestration layer between writing code and
-shipping it — coordinating tools rather than replacing all of them. Blink owns
-project creation; Killer owns security. Keep contributions aligned with that
-separation.
+shipping it — coordinating a developer's existing tools rather than replacing
+all of them. Keep contributions aligned with that focus.
 
 ## License
 

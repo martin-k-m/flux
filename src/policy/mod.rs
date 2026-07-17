@@ -32,7 +32,7 @@ pub fn evaluate(config: &FluxConfig, approvals: u32) -> Vec<Violation> {
     let has_security = config
         .steps
         .iter()
-        .any(|s| s.tool.as_deref() == Some("killer") || s.name.contains("security"));
+        .any(|s| s.name.contains("security") || s.is_hook());
 
     let mut violations = Vec::new();
     for policy in &config.policies {
@@ -45,7 +45,7 @@ pub fn evaluate(config: &FluxConfig, approvals: u32) -> Vec<Violation> {
         if policy.require_security && !has_security {
             violations.push(Violation {
                 policy: policy.name.clone(),
-                message: "requires a security step (e.g. `tool killer`), but none is present"
+                message: "requires a security step (a step named *security*, or a `tool` hook), but none is present"
                     .into(),
             });
         }
@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn passes_when_requirements_met() {
         let src = format!(
-            "{POLICY}pipeline {{ step test {{ command \"cargo test\" }} step security {{ tool killer }} }}"
+            "{POLICY}pipeline {{ step test {{ command \"cargo test\" }} step security {{ tool scanner }} }}"
         );
         let config = parse(&src).unwrap();
         assert!(evaluate(&config, 2).is_empty());

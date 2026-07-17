@@ -123,6 +123,8 @@ pub fn render(intel: &Intelligence) -> String {
         .map(|l| crate::intel::language_display(l))
         .unwrap_or_else(|| "—".into());
 
+    let score_note = format!("{} health signals", intel.health.signals.len());
+
     format!(
         r#"<!doctype html>
 <html lang="en">
@@ -170,7 +172,7 @@ b {{ color:#e6edf3; }}
     <h2>Project health</h2>
     <div class="score">
       <div class="ring">{score}</div>
-      <div><b>{grade}</b><div class="sub">{killer}</div></div>
+      <div><b>{grade}</b><div class="sub">{score_note}</div></div>
     </div>
   </section>
   <section class="card">
@@ -205,11 +207,7 @@ b {{ color:#e6edf3; }}
         git = esc(&git),
         score = intel.health.score,
         grade = esc(intel.health.grade()),
-        killer = if intel.has_killer {
-            "Secured by Killer"
-        } else {
-            "Killer not detected"
-        },
+        score_note = score_note,
         recommendations = recommendations,
         languages = languages,
         components = components,
