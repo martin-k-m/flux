@@ -4,9 +4,10 @@ Context for AI agents working in this repository.
 
 ## What this is
 
-**Flux** is a local-first developer automation / infrastructure platform: a single
+**Flux** is a local-first, **AI-native** developer automation platform: a single
 Rust CLI (`flux`) that takes a project from build → test → package → deploy from
-one `.flux` config file. Repo: <https://github.com/martin-k-m/flux>.
+one `.flux` config file, and makes the repo legible to AI agents (it embeds no
+LLM — see the Phase 5 layer below). Repo: <https://github.com/martin-k-m/flux>.
 
 Flux is a standalone tool — it coordinates a developer's existing tools rather
 than replacing them. The marketing + docs website lives in a separate repo

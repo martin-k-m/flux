@@ -1,9 +1,12 @@
 # Flux
 
-**Flux is a local-first developer infrastructure platform.** It provides a
+**Flux is a local-first, AI-native developer automation platform.** It provides a
 simple configuration language for building, testing, packaging, and deploying
-applications consistently across environments. Built in Rust, Flux aims to be
-the orchestration layer that connects a developer's tools — not replace them.
+applications consistently across environments — and it makes the repository
+*legible to AI agents* (repository intelligence, agents, `flux ask`). Built in
+Rust, Flux is the orchestration layer that connects a developer's tools — not
+replace them. It embeds no LLM; it can pipe context to an external model you
+configure.
 
 > Give Flux a project, and it knows how to build, test, package, and ship it.
 
