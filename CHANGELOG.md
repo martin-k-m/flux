@@ -6,6 +6,12 @@ All notable changes to Flux are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **Install via Homebrew and Scoop.** `brew install martin-k-m/flux/flux` (tap:
+  [martin-k-m/homebrew-flux](https://github.com/martin-k-m/homebrew-flux)) and
+  `scoop bucket add flux https://github.com/martin-k-m/scoop-flux && scoop install flux`.
+
 ## [0.3.0] — 2026-07-16
 
 ### Removed

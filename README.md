@@ -65,8 +65,19 @@ deployment { target kubernetes replicas 3 }
 ## Install
 
 ```sh
+# Homebrew (macOS/Linux)
+brew install martin-k-m/flux/flux
+
+# Scoop (Windows)
+scoop bucket add flux https://github.com/martin-k-m/scoop-flux
+scoop install flux
+
+# From source
 cargo build --release      # binary at target/release/flux
 ```
+
+Prebuilt binaries for Linux, macOS, and Windows (x86_64 + arm64) are attached to
+every [GitHub Release](https://github.com/martin-k-m/flux/releases/latest).
 
 ## Commands
 
@@ -270,7 +281,7 @@ flux test        # run the test step
 - ○ REST API & SDKs
 - ○ Hosted plugin marketplace
 - ○ Team workflows
-- ○ Prebuilt installer (`cargo install` / Homebrew / one-line script)
+- ○ winget package (Homebrew and Scoop are live today)
 
 ## Documentation
 
