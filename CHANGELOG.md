@@ -6,6 +6,15 @@ All notable changes to Flux are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+
+- **Blink/Killer/Beacon ecosystem coupling.** Flux is now a standalone tool. The
+  `integrations` module (automatic Blink/Killer detection and auto-injection of a
+  security step) is gone, along with the `Siblings` line in `flux info`, the
+  "Secured by Killer" dashboard note, and all ecosystem branding in the docs. The
+  generic `tool <name>` step hook remains — it hands a step off to any installed
+  plugin — but no longer special-cases Killer.
+
 ## [0.2.0] — 2026-07-16
 
 **AI-native platform (Phase 5).** Flux becomes AI-legible without embedding a

@@ -24,7 +24,7 @@ pipeline {
 
     step security {
         needs tests
-        tool killer                     # hand off to the Killer scanner
+        tool scanner                    # hand off to an installed tool/plugin
     }
 
     step deploy {
@@ -61,7 +61,7 @@ Flux uses the language's default steps.
 | Field                    | Meaning                                                       |
 | ------------------------ | ------------------------------------------------------------- |
 | `command "<shell>"`      | Shell command (`cmd /C` on Windows, `sh -c` elsewhere).       |
-| `tool <id>`              | Hand off to a tool integration (e.g. `killer`).               |
+| `tool <id>`              | Hand off to an installed tool/plugin (e.g. `scanner`).        |
 | `description "<text>"`   | Optional human description.                                   |
 | `cache on` / `cache off` | Participate in the build cache (default `on`).                |
 | `needs <a>` / `needs [ a, b ]` | Steps that must succeed first.                          |
@@ -195,7 +195,7 @@ policy production {
 
 `flux policy` checks the current pipeline; `flux ci` refuses to run when a policy
 is violated. `require tests` needs a step whose name contains `test`; `require
-security` needs a `tool killer` (or `security`) step; `require approvals N` is
+security` needs a step named `security` or any `tool` hook; `require approvals N` is
 satisfied by the `FLUX_APPROVALS` environment variable (Flux has no identity
 system of its own).
 

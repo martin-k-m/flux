@@ -19,7 +19,6 @@ use crate::core::logging as log;
 use crate::core::pipeline::Pipeline;
 use crate::core::runner::fmt_duration;
 use crate::deploy;
-use crate::integrations;
 use crate::policy;
 use crate::repro::{self, Lock};
 use crate::runners::containers;
@@ -543,23 +542,11 @@ fn graph_exit(outcome: &GraphOutcome) -> i32 {
 // Build / test / run / ci
 // ---------------------------------------------------------------------------
 
-/// Detect sibling tools (Blink/Killer) and adjust the pipeline accordingly.
-fn apply_integrations(root: &Path, steps: &mut Vec<config::Step>) {
-    let siblings = integrations::detect(root);
-    if siblings.has_blink() {
-        log::ok_line("Blink project profile loaded — optimized pipeline selected");
-    }
-    if integrations::inject_killer(steps, &siblings) {
-        log::ok_line("Killer configured — added an automatic security scan");
-    }
-}
-
 fn cmd_build(root: &Path) -> anyhow::Result<i32> {
-    let (config, _, mut pipeline) = load_context(root)?;
+    let (config, _, pipeline) = load_context(root)?;
     ensure_runnable(&pipeline)?;
 
     print_header(&pipeline);
-    apply_integrations(root, &mut pipeline.steps);
     log::heading("Pipeline:");
 
     let outcome = execute_steps(root, &config, &pipeline.steps, true)?;
@@ -627,15 +614,13 @@ fn cmd_run(root: &Path, step_name: &str) -> anyhow::Result<i32> {
 }
 
 fn cmd_ci(root: &Path) -> anyhow::Result<i32> {
-    let (config, detection, mut pipeline) = load_context(root)?;
+    let (config, detection, pipeline) = load_context(root)?;
     ensure_runnable(&pipeline)?;
 
     log::banner(&format!("{VERSION_LABEL}  ·  CI mode"));
     log::info_line(&log::dim("Clean environment · cache disabled"));
     log::field("Project", &pipeline.project);
     log::field("Language", &language_label(&pipeline.language));
-
-    apply_integrations(root, &mut pipeline.steps);
 
     // Enforce declared policies before running anything (4.15).
     let violations = policy::evaluate(&config, policy::approvals_from_env());
@@ -1039,14 +1024,8 @@ fn cmd_project(root: &Path, json: bool) -> anyhow::Result<i32> {
         }
     }
 
-    if intel.has_killer {
-        log::info_line(&format!(
-            "\n  {}",
-            log::dim("Security: Protected by Killer")
-        ));
-    }
     log::info_line(&format!(
-        "  {}",
+        "\n  {}",
         log::dim(&format!(
             "knowledge graph written to {}",
             written
@@ -1674,15 +1653,6 @@ fn cmd_status(root: &Path) -> anyhow::Result<i32> {
             &format!("{} ({} members)", ws.name, ws.members.len()),
         );
     }
-    let siblings = integrations::detect(root);
-    log::field(
-        "Siblings",
-        &format!(
-            "Blink {}, Killer {}",
-            yes_no(siblings.has_blink()),
-            yes_no(siblings.has_killer())
-        ),
-    );
     let a = analytics::analyze(root).unwrap_or_default();
     if a.runs > 0 {
         log::field("Runs recorded", &a.runs.to_string());
@@ -2047,14 +2017,6 @@ fn require_language(root: &Path) -> anyhow::Result<String> {
         .language
         .or_else(|| detect::detect(root).language)
         .ok_or_else(|| anyhow::anyhow!("could not determine the project language"))
-}
-
-fn yes_no(b: bool) -> String {
-    if b {
-        log::green("yes")
-    } else {
-        log::dim("no").to_string()
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2433,8 +2395,8 @@ fn generate_config(project: &str, language: &str, steps: &[config::Step]) -> Str
         }
         out.push_str("    }\n\n");
     }
-    out.push_str("    # Security scanning is handled by Killer. Uncomment to enable:\n");
-    out.push_str("    # step security { tool killer }\n\n");
+    out.push_str("    # Hand a step off to an installed tool/plugin instead of a shell command:\n");
+    out.push_str("    # step security { tool scanner }\n\n");
     out.push_str("    # Steps can depend on each other, retry, and run conditionally:\n");
     out.push_str("    # step deploy {\n");
     out.push_str("    #     needs [ test ]\n");

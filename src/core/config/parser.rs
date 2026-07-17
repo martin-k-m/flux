@@ -784,12 +784,12 @@ mod tests {
             language node
             pipeline {
                 step build { command "npm run build" cache off }
-                step security { tool killer }
+                step security { tool scanner }
             }
         "#;
         let cfg = parse(src).unwrap();
         assert!(!cfg.steps[0].cache);
-        assert_eq!(cfg.steps[1].tool.as_deref(), Some("killer"));
+        assert_eq!(cfg.steps[1].tool.as_deref(), Some("scanner"));
         assert!(cfg.steps[1].is_hook());
     }
 

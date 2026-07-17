@@ -47,8 +47,6 @@ pub struct Intelligence {
     pub components: Vec<Component>,
     pub git: GitStats,
     pub health: HealthScore,
-    /// Whether Blink/Killer siblings were detected (ecosystem context).
-    pub has_killer: bool,
 }
 
 /// Analyse the repository rooted at `root`.
@@ -65,7 +63,6 @@ pub fn analyze(root: &Path) -> Intelligence {
     let dependencies = deps::analyze(root, primary_language.as_deref());
     let components = infer_components(root);
     let git = git::analyze(root);
-    let siblings = crate::integrations::detect(root);
 
     let health = health::score(root, &detection, &git, &dependencies);
 
@@ -83,7 +80,6 @@ pub fn analyze(root: &Path) -> Intelligence {
         components,
         git,
         health,
-        has_killer: siblings.has_killer(),
     }
 }
 

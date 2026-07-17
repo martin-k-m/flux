@@ -24,7 +24,6 @@ flux/
 ├── assist/       heuristic failure diagnosis
 ├── workspace/    multi-project workspaces + affected-detection
 ├── policy/       policy engine (require tests/security/approvals)
-├── integrations/ Blink/Killer auto-detection
 ├── tools/        first-party dev tools (fmt/lint/doctor/changelog/version/deps)
 ├── plugins/      plugin registry + install + PDK scaffolding
 │
@@ -89,12 +88,6 @@ Worker count defaults to the core count (capped at 16).
 - **`runners/containers`** — wraps commands for Docker/Podman when an
   `environment` image is declared.
 
-## Integrations
-
-- **Blink** — `blink create` can generate a `.flux`; Blink does not run builds.
-- **Killer** — a `tool killer` step hands off to the Killer scanner between
-  build and release.
-
 ## Modules & reproducibility
 
 - **Modules (`core/config`)** — `use <name>` is resolved at load time by reading
@@ -115,8 +108,6 @@ Worker count defaults to the core count (capped at 16).
   `workspace build` rebuilds only what changed.
 - **Policy (`policy`)** — `evaluate` checks a parsed config's `policy` blocks
   against its steps and an approvals count; `flux ci` blocks on violations.
-- **Integrations (`integrations`)** — detects Blink/Killer config files and can
-  inject a `tool killer` security step into the pipeline automatically.
 - **Tools (`tools`)** — language-aware `fmt`/`lint` wrappers, plus pure-logic
   `version` (semver bump), `changelog` (git-commit grouping), `deps`, and
   `doctor` (environment checks). The logic pieces are unit-tested directly.
