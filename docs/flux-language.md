@@ -48,8 +48,11 @@ deployment { target kubernetes replicas 3 }
 | `language <id>`          | `rust`, `node`, `python`, …                         |
 | `environment { … }`      | A container build environment (see below).          |
 | `secret <NAME>`          | Declares a secret the pipeline uses.                |
+| `import <name>`          | Declares an intended module (see *Modules*).        |
 | `deployment { … }`       | A deploy target (see below).                        |
-| `pipeline { … }`         | The steps.                                          |
+| `runners { … }`          | Declares runner pools (see *Runner pools*).         |
+| `policy <name> { … }`    | An organization rule (see *Policies*).              |
+| `pipeline { … }`         | The steps (and `use` of modules).                   |
 
 All are optional. Omit `language` and Flux detects it; omit the `pipeline` and
 Flux uses the language's default steps.
@@ -229,15 +232,30 @@ item      := "project" STRING
            | "language" IDENT
            | "environment" "{" ("image" STRING)* "}"
            | "secret" IDENT
+           | "import" name
            | "deployment" "{" dep_field* "}"
-           | "pipeline" "{" step* "}"
+           | "runners" "{" pool* "}"
+           | "policy" name "{" require* "}"
+           | "pipeline" "{" (step | use)* "}"
 dep_field := "target" IDENT | "replicas" NUM | "image" STRING
+pool      := "pool" name "{" pool_field* "}"
+pool_field := "os" name | "gpu" bool | "memory" name
+           | "requirements" "{" pool_field* "}"
+require   := "require" ("tests" | "security" | "approvals" NUM)
+use       := "use" name
 step      := "step" IDENT "{" field* "}"
 field     := "command" STRING | "tool" IDENT | "description" STRING
            | "cache" IDENT | "needs" ident_or_list | "env" ident_or_list
+           | "inputs" ident_or_list | "pool" name
            | "retries" NUM | "only_if" IDENT ("==" | "!=") STRING
-ident_or_list := IDENT | "[" (IDENT ("," IDENT)*)? "]"
+ident_or_list := item_or_str | "[" (item_or_str ("," item_or_str)*)? "]"
+item_or_str   := IDENT | STRING
+name          := IDENT | STRING
+bool          := "true" | "yes" | "on" | anything else (false)
 ```
+
+Inside `[ … ]` lists and `requirements`/`policy`/`pool` blocks, commas are
+optional separators — they are skipped wherever they appear.
 
 Strings support `\n`, `\t`, `\"`, `\\`. Identifiers are
 `[A-Za-z_][A-Za-z0-9_.-]*`. Parse errors report a 1-based line number.

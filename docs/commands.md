@@ -22,7 +22,7 @@ Run a single named step (and its dependencies)
 
 ### `flux clean`
 
-Remove Flux's cache and artifacts
+Clear the build cache (artifacts, secrets, and runners are kept)
 
 ### `flux info`
 

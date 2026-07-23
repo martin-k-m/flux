@@ -73,7 +73,7 @@ enum Command {
         /// The step name to run (e.g. `build`).
         step: String,
     },
-    /// Remove Flux's cache and artifacts.
+    /// Clear the build cache (artifacts, secrets, and runners are kept).
     Clean,
     /// Show what Flux detects about this project.
     Info,

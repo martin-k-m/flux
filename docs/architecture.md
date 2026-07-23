@@ -1,7 +1,8 @@
-# Flux architecture (Phase 2)
+# Flux architecture
 
 Flux is a thin CLI over a core engine, with pluggable runners and a set of
-platform subsystems.
+platform subsystems. This document covers the whole crate as it stands today
+(Phases 1–5).
 
 ```
 flux/

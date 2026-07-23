@@ -10,9 +10,17 @@
 //!            | "language" IDENT
 //!            | "environment" "{" ("image" STRING)* "}"
 //!            | "secret" IDENT
+//!            | "import" name
 //!            | "deployment" "{" dep_field* "}"
-//!            | "pipeline" "{" step* "}"
+//!            | "runners" "{" pool* "}"
+//!            | "policy" name "{" require* "}"
+//!            | "pipeline" "{" (step | use)* "}"
 //! dep_field := "target" IDENT | "replicas" NUM | "image" STRING
+//! pool      := "pool" name "{" pool_field* "}"
+//! pool_field := "os" name | "gpu" bool | "memory" name
+//!            | "requirements" "{" pool_field* "}"
+//! require   := "require" ("tests" | "security" | "approvals" NUM)
+//! use       := "use" name
 //! step      := "step" IDENT "{" field* "}"
 //! field     := "command" STRING
 //!            | "tool" IDENT
@@ -20,13 +28,19 @@
 //!            | "cache" IDENT              ; on/off/true/false/yes/no
 //!            | "needs" ident_or_list
 //!            | "env" ident_or_list
+//!            | "inputs" ident_or_list     ; cache-scoping globs
+//!            | "pool" name
 //!            | "retries" NUM
 //!            | "only_if" IDENT ("=="|"!=") STRING
-//! ident_or_list := IDENT | "[" (IDENT ("," IDENT)*)? "]"
+//! ident_or_list := item_or_str | "[" (item_or_str ("," item_or_str)*)? "]"
+//! item_or_str   := IDENT | STRING
+//! name          := IDENT | STRING
+//! bool          := "true" | "yes" | "on"  ; anything else is false
 //! ```
 //!
 //! A `:` after a field keyword (e.g. `only_if:` or `env:`) is accepted and
-//! ignored, so the spec's colon style parses too.
+//! ignored, so the spec's colon style parses too. Commas inside `[ … ]` lists
+//! and inside `policy`/`runners`/`requirements` blocks are optional separators.
 
 use std::fmt;
 
@@ -858,6 +872,56 @@ mod tests {
         assert_eq!(cond.var, "branch");
         assert_eq!(cond.op, CondOp::Eq);
         assert_eq!(cond.value, "main");
+    }
+
+    /// The top-level `import`/`runners`/`policy` items and the `inputs`/`pool`
+    /// step fields are part of the documented grammar but were only exercised
+    /// end-to-end; this pins them at the parser level.
+    #[test]
+    fn parses_imports_runner_pools_policies_and_step_scoping() {
+        let src = r#"
+            import shared-ci
+            runners {
+                pool "gpu-builders" {
+                    requirements { gpu true, memory "32gb" }
+                }
+                pool linux { os linux }
+            }
+            policy production {
+                require tests
+                require security
+                require approvals 2
+            }
+            pipeline {
+                use rust-library
+                step build {
+                    command "cargo build --release"
+                    inputs [ "src/**", "Cargo.toml" ]
+                    pool "gpu-builders"
+                }
+            }
+        "#;
+        let cfg = parse(src).unwrap();
+        assert_eq!(cfg.imports, vec!["shared-ci"]);
+        assert_eq!(cfg.uses, vec!["rust-library"]);
+
+        assert_eq!(cfg.runner_pools.len(), 2);
+        let gpu = &cfg.runner_pools[0];
+        assert_eq!(gpu.name, "gpu-builders");
+        assert_eq!(gpu.gpu, Some(true));
+        assert_eq!(gpu.memory.as_deref(), Some("32gb"));
+        assert_eq!(cfg.runner_pools[1].os.as_deref(), Some("linux"));
+
+        assert_eq!(cfg.policies.len(), 1);
+        let policy = &cfg.policies[0];
+        assert_eq!(policy.name, "production");
+        assert!(policy.require_tests);
+        assert!(policy.require_security);
+        assert_eq!(policy.require_approvals, 2);
+
+        let build = &cfg.steps[0];
+        assert_eq!(build.inputs, vec!["src/**", "Cargo.toml"]);
+        assert_eq!(build.pool.as_deref(), Some("gpu-builders"));
     }
 
     #[test]

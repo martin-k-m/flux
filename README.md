@@ -79,8 +79,9 @@ scoop install flux
 cargo build --release      # binary at target/release/flux
 ```
 
-Prebuilt binaries for Linux, macOS, and Windows (x86_64 + arm64) are attached to
-every [GitHub Release](https://github.com/martin-k-m/flux/releases/latest).
+Prebuilt binaries are attached to every
+[GitHub Release](https://github.com/martin-k-m/flux/releases/latest) for five
+targets: Linux (x86_64, aarch64), macOS (x86_64, aarch64), and Windows (x86_64).
 
 ## Commands
 
@@ -91,7 +92,7 @@ every [GitHub Release](https://github.com/martin-k-m/flux/releases/latest).
 | `flux test`                          | Run the test step(s) and their dependencies              |
 | `flux run <step>`                    | Run one step and its dependencies                        |
 | `flux ci`                            | Clean, cache-free pipeline; records an artifact          |
-| `flux clean`                         | Remove Flux's cache/artifacts/secrets/runner state       |
+| `flux clean`                         | Clear the build cache (artifacts/secrets/runners kept)   |
 | `flux info`                          | Show detection, container engine, and runners            |
 | `flux deploy [--target T]`           | Deploy per the `deployment { … }` block                  |
 | `flux project` / `flux ask "…"`      | Repository intelligence / natural-language query         |
@@ -105,7 +106,7 @@ every [GitHub Release](https://github.com/martin-k-m/flux/releases/latest).
 | `flux analytics`                     | Build-performance stats from run history                 |
 | `flux lock` / `flux reproduce`       | Capture / verify a reproducible environment              |
 | `flux secret set <n> <v> --env prod` | Per-environment encrypted secrets                        |
-| `flux init <template>`               | Scaffold from a template (react, rust-api, library, cli) |
+| `flux init <template>`               | Scaffold from a template (react, node-service, rust-api, library, cli) |
 | `flux workspace status` / `build`    | Multi-project workspace, builds only affected members    |
 | `flux policy`                        | Check the pipeline against declared policies             |
 | `flux fmt` / `lint` / `doctor`       | Language-aware format, lint, and environment diagnosis   |

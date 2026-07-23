@@ -19,7 +19,7 @@
     },
     {
       "name": "clean",
-      "about": "Remove Flux's cache and artifacts"
+      "about": "Clear the build cache (artifacts, secrets, and runners are kept)"
     },
     {
       "name": "info",
