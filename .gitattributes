@@ -1,0 +1,17 @@
+# Keep line endings consistent everywhere.
+#
+# Git for Windows' installer defaults to core.autocrlf=true, which rewrites
+# every tracked text file to CRLF on checkout. Flux generates docs with LF
+# (see src/docs_engine), so a CRLF working tree used to make
+# `flux docs --check` report drift that did not exist. `eol=lf` pins the
+# working tree to LF on every platform, so what is committed, what is
+# generated, and what is on disk all agree.
+#
+# `flux docs --check` normalizes line endings too, so contributors whose
+# editors insist on CRLF are not broken either — this just keeps the tree tidy.
+
+* text=auto eol=lf
+
+# Windows batch files are the one thing that genuinely needs CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
