@@ -54,11 +54,26 @@ pub fn write(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(written)
 }
 
+/// Normalize line endings before comparing generated content to what's on disk.
+///
+/// The generator always emits `\n`, but a Windows checkout with
+/// `core.autocrlf=true` (Git for Windows' installer default) rewrites every
+/// tracked text file to `\r\n`. A byte-for-byte comparison then reports every
+/// generated file as "out of sync" even though the committed content is
+/// identical — `flux docs --check` was unusable for Windows contributors.
+/// Line endings are not content, so they're normalized away here.
+fn normalize_eol(s: &str) -> String {
+    s.replace("\r\n", "\n")
+}
+
 /// Return the generated files whose on-disk content is missing or stale.
 pub fn check(root: &Path) -> Vec<PathBuf> {
     generate_files(root)
         .into_iter()
-        .filter(|f| std::fs::read_to_string(&f.path).ok().as_deref() != Some(f.content.as_str()))
+        .filter(|f| match std::fs::read_to_string(&f.path) {
+            Ok(on_disk) => normalize_eol(&on_disk) != normalize_eol(&f.content),
+            Err(_) => true,
+        })
         .map(|f| f.path)
         .collect()
 }
@@ -160,6 +175,35 @@ mod tests {
         let manifest = std::fs::read_to_string(dir.join("docs/manifest.json")).unwrap();
         assert!(manifest.contains("\"tool\": \"flux\""));
         assert!(manifest.contains("maintenance"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn crlf_checkout_is_not_drift() {
+        let mut dir = std::env::temp_dir();
+        dir.push(format!("flux-docs-crlf-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        write(&dir).unwrap();
+        assert!(check(&dir).is_empty());
+
+        // Simulate what `core.autocrlf=true` does to the working tree on a
+        // Windows checkout: every LF becomes CRLF. That must not read as drift.
+        for f in generate_files(&dir) {
+            let crlf = f.content.replace('\n', "\r\n");
+            std::fs::write(&f.path, crlf).unwrap();
+        }
+        assert!(
+            check(&dir).is_empty(),
+            "CRLF line endings must not be reported as out-of-sync docs"
+        );
+
+        // A real content change still is drift.
+        let agents = dir.join("docs/agents.md");
+        std::fs::write(&agents, "not the generated agent catalogue\n").unwrap();
+        assert_eq!(check(&dir), vec![agents]);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
