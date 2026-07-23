@@ -17,8 +17,9 @@
 //!            | "pipeline" "{" (step | use)* "}"
 //! dep_field := "target" IDENT | "replicas" NUM | "image" STRING
 //! pool      := "pool" name "{" pool_field* "}"
-//! pool_field := "os" name | "gpu" bool | "memory" name
-//!            | "requirements" "{" pool_field* "}"
+//! pool_field := requirement_field
+//!            | "requirements" "{" requirement_field* "}"
+//! requirement_field := "os" name | "gpu" bool | "memory" name
 //! require   := "require" ("tests" | "security" | "approvals" NUM)
 //! use       := "use" name
 //! step      := "step" IDENT "{" field* "}"
@@ -105,6 +106,12 @@ fn is_ident_char(c: char) -> bool {
 }
 
 fn lex(src: &str) -> Result<Vec<Token>, ParseError> {
+    // Windows editors (Notepad, some VS Code configurations) save UTF-8 with a
+    // leading byte-order mark. The BOM is an encoding artifact, not content, so
+    // drop it — otherwise the first token is U+FEFF, which is not whitespace,
+    // and the file fails with an opaque "unexpected character" error.
+    let src = src.strip_prefix('\u{feff}').unwrap_or(src);
+
     let mut tokens = Vec::new();
     let mut line = 1usize;
     let mut chars = src.chars().peekable();
@@ -789,6 +796,36 @@ mod tests {
             Some("cargo build --release")
         );
         assert!(cfg.steps[1].cache);
+    }
+
+    /// A `.flux` file saved as "UTF-8 with BOM" (the Windows editor default)
+    /// must parse exactly like the same file without one.
+    #[test]
+    fn parses_a_file_with_a_utf8_bom() {
+        let body = "project \"my-app\"\nlanguage rust\npipeline {\n  step build { command \"cargo build\" }\n}\n";
+        let with_bom = format!("\u{feff}{body}");
+
+        // The fixture really does start with the BOM bytes EF BB BF.
+        assert_eq!(&with_bom.as_bytes()[..3], &[0xEF, 0xBB, 0xBF]);
+
+        let cfg = parse(&with_bom).expect("a BOM-prefixed file should parse");
+        assert_eq!(cfg.project.as_deref(), Some("my-app"));
+        assert_eq!(cfg.language.as_deref(), Some("rust"));
+        assert_eq!(cfg.steps.len(), 1);
+        assert_eq!(cfg.steps[0].name, "build");
+
+        // Identical to the same source without the BOM.
+        let plain = parse(body).unwrap();
+        assert_eq!(cfg.project, plain.project);
+        assert_eq!(cfg.steps.len(), plain.steps.len());
+    }
+
+    /// Only a *leading* BOM is an encoding artifact; one in the middle of the
+    /// file is genuinely bogus and should still be rejected.
+    #[test]
+    fn a_bom_in_the_middle_is_still_an_error() {
+        let src = "project \"my-app\"\n\u{feff}language rust\n";
+        assert!(parse(src).is_err());
     }
 
     #[test]

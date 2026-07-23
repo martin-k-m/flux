@@ -239,8 +239,9 @@ item      := "project" STRING
            | "pipeline" "{" (step | use)* "}"
 dep_field := "target" IDENT | "replicas" NUM | "image" STRING
 pool      := "pool" name "{" pool_field* "}"
-pool_field := "os" name | "gpu" bool | "memory" name
-           | "requirements" "{" pool_field* "}"
+pool_field := requirement_field
+           | "requirements" "{" requirement_field* "}"
+requirement_field := "os" name | "gpu" bool | "memory" name
 require   := "require" ("tests" | "security" | "approvals" NUM)
 use       := "use" name
 step      := "step" IDENT "{" field* "}"
