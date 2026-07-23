@@ -97,14 +97,59 @@ fn known(name: &str) -> bool {
     CATALOG.iter().any(|(n, _)| *n == name)
 }
 
-/// Search the catalog by name or category substring.
-pub fn search(query: &str) -> Vec<(&'static str, &'static str)> {
+/// The category reported for the built-in pipelines in [`registry`]. They are
+/// all language build pipelines, matching how `CATALOG` labels `npm`/`cargo`.
+const BUILTIN_CATEGORY: &str = "language";
+
+/// One plugin-search hit.
+///
+/// `builtin` marks a plugin that ships inside Flux (see [`registry`]): it is
+/// already available and needs no installation. Every other hit comes from
+/// `CATALOG` and can be recorded with `flux plugin install`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchHit {
+    pub name: String,
+    pub category: String,
+    pub builtin: bool,
+}
+
+/// Search the built-in registry *and* the catalog by name or category
+/// substring.
+///
+/// The two lists are separate, so searching only the catalog made the built-in
+/// pipelines (`rust`, `node`, `python`) look like they did not exist. Built-ins
+/// are listed first and flagged; a catalog entry that is also built in is
+/// reported once, as a built-in.
+pub fn search(query: &str) -> Vec<SearchHit> {
     let q = query.to_lowercase();
-    CATALOG
-        .iter()
-        .copied()
-        .filter(|(n, c)| n.contains(&q) || c.contains(&q))
-        .collect()
+    let mut out: Vec<SearchHit> = Vec::new();
+
+    for plugin in registry() {
+        let name = plugin.id().to_string();
+        if name.to_lowercase().contains(&q) || BUILTIN_CATEGORY.contains(&q) {
+            out.push(SearchHit {
+                name,
+                category: BUILTIN_CATEGORY.to_string(),
+                builtin: true,
+            });
+        }
+    }
+
+    for (name, category) in CATALOG.iter().copied() {
+        if !(name.contains(&q) || category.contains(&q)) {
+            continue;
+        }
+        if out.iter().any(|hit| hit.name == name) {
+            continue;
+        }
+        out.push(SearchHit {
+            name: name.to_string(),
+            category: category.to_string(),
+            builtin: false,
+        });
+    }
+
+    out
 }
 
 /// The result of verifying one installed plugin.
@@ -221,4 +266,62 @@ pub fn installed(root: &std::path::Path) -> Vec<String> {
     }
     out.sort();
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(query: &str) -> Vec<String> {
+        search(query).into_iter().map(|h| h.name).collect()
+    }
+
+    /// Every built-in from `registry()` must be findable by `plugin search`.
+    /// `rust` and `node` are not in `CATALOG`, so a catalog-only search
+    /// reported "no matches" for plugins Flux actually ships.
+    #[test]
+    fn search_finds_builtin_plugins() {
+        for builtin in registry() {
+            let id = builtin.id();
+            let hits = search(id);
+            let hit = hits
+                .iter()
+                .find(|h| h.name == id)
+                .unwrap_or_else(|| panic!("built-in '{id}' not found by search"));
+            assert!(hit.builtin, "built-in '{id}' should be flagged as built-in");
+        }
+    }
+
+    #[test]
+    fn search_still_finds_catalog_entries() {
+        assert!(names("docker").contains(&"docker".to_string()));
+        // Category matches keep working.
+        assert!(names("cloud").contains(&"aws".to_string()));
+    }
+
+    /// `python` is both a built-in and a catalog entry; report it once.
+    #[test]
+    fn search_does_not_duplicate_builtin_and_catalog_entries() {
+        let hits = search("python");
+        let python: Vec<_> = hits.iter().filter(|h| h.name == "python").collect();
+        assert_eq!(python.len(), 1, "expected one 'python' hit, got {python:?}");
+        assert!(python[0].builtin);
+    }
+
+    #[test]
+    fn search_excludes_unrelated_plugins() {
+        assert!(!names("docker").contains(&"terraform".to_string()));
+        assert!(search("definitely-not-a-plugin").is_empty());
+    }
+
+    /// Built-ins are listed before installable catalog entries.
+    #[test]
+    fn builtins_are_listed_first() {
+        let hits = search("language");
+        let first_catalog = hits.iter().position(|h| !h.builtin);
+        let last_builtin = hits.iter().rposition(|h| h.builtin);
+        if let (Some(first_catalog), Some(last_builtin)) = (first_catalog, last_builtin) {
+            assert!(last_builtin < first_catalog, "built-ins should sort first");
+        }
+    }
 }

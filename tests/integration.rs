@@ -459,6 +459,25 @@ fn plugin_search_filters_catalog() {
         "unrelated plugin should not match: {out}"
     );
 
+    // Built-in plugins live in `plugins::registry()`, not `CATALOG`; searching
+    // for one used to report "no matches".
+    for builtin in ["rust", "node", "python"] {
+        let (out, ok) = run(&dir, &["plugin", "search", builtin]);
+        assert!(ok, "{out}");
+        assert!(
+            out.contains(builtin),
+            "built-in '{builtin}' should be found: {out}"
+        );
+        assert!(
+            !out.contains("no matches"),
+            "built-in '{builtin}' should not report no matches: {out}"
+        );
+        assert!(
+            out.contains("built-in"),
+            "built-in '{builtin}' should be marked as such: {out}"
+        );
+    }
+
     let _ = std::fs::remove_dir_all(&dir);
 }
 

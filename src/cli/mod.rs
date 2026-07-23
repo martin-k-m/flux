@@ -1481,18 +1481,28 @@ fn cmd_plugin(root: &Path, action: PluginAction) -> anyhow::Result<i32> {
             if results.is_empty() {
                 log::info_line(&format!("  {} no matches", log::dim(log::DOT)));
             }
-            for (name, category) in results {
+            for hit in &results {
+                let note = if hit.builtin {
+                    log::dim("  built-in, already available")
+                } else {
+                    String::new()
+                };
                 println!(
-                    "  {} {}  {}",
+                    "  {} {}  {}{}",
                     log::green(log::CHECK),
-                    log::bold(name),
-                    log::dim(&format!("[{category}]"))
+                    log::bold(&hit.name),
+                    log::dim(&format!("[{}]", hit.category)),
+                    note
                 );
             }
-            log::info_line(&format!(
-                "\n  {}",
-                log::dim("Install with `flux plugin install <name>`.")
-            ));
+            // Built-ins are not installable (`plugin install` only knows the
+            // catalog), so only offer the hint when it actually applies.
+            if results.iter().any(|hit| !hit.builtin) {
+                log::info_line(&format!(
+                    "\n  {}",
+                    log::dim("Install with `flux plugin install <name>`.")
+                ));
+            }
             Ok(0)
         }
         PluginAction::Verify => {
